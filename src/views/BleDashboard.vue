@@ -225,20 +225,15 @@
         </div>
       </div>
 
-      <div
-        v-else
-        class="bg-white border-4 border-black p-6 rounded-2xl shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] space-y-4"
-      >
-        <div class="bg-yellow-100 border-2 border-black p-3 rounded-xl">
-          <span class="text-xs font-black uppercase text-yellow-900 block"
-            >Filter Layanan Target (Primary Service):</span
-          >
-          <p
-            class="text-xs font-mono font-bold text-gray-800 break-all select-all mt-0.5"
-          >
-            {{ BleService.serviceUUID }}
-          </p>
-        </div>
+      <div class="bg-yellow-100 border-2 border-black p-3 rounded-xl" v-else>
+        <span class="text-xs font-black uppercase text-yellow-900 block"
+          >Filter Layanan Target (Primary Service):</span
+        >
+        <p
+          class="text-xs font-mono font-bold text-gray-800 break-all select-all mt-0.5"
+        >
+          {{ BleService.serviceUUID }}
+        </p>
       </div>
     </div>
 
