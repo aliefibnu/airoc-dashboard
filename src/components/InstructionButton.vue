@@ -43,19 +43,19 @@
               <h3 class="text-sm font-black uppercase tracking-wider text-black">
                 {{ param.label || param.name }}
               </h3>
-              <h4
-                v-if="param.type === 'range'"
+              <span
+                v-if="param.defaultValue !== undefined && param.defaultValue !== null && param.defaultValue !== ''"
                 class="text-xs font-mono font-black bg-yellow-200 border border-black px-2 py-0.5 rounded"
               >
-                {{ inputValues[param.name] }}
-              </h4>
+                DEFAULT: {{ param.defaultValue }}
+              </span>
             </div>
 
             <input
               v-model="inputValues[param.name]"
               :type="param.type || 'text'"
               :inputmode="getInputMode(param)"
-              :placeholder="param.placeholder || 'PARAM VALUE...'"
+              :placeholder="param.placeholder || (param.defaultValue !== undefined && param.defaultValue !== '' ? 'Default: ' + param.defaultValue : 'PARAM VALUE...')"
               :min="param.min"
               :max="param.max"
               :step="param.step"
@@ -82,23 +82,13 @@
             <h3 class="uppercase tracking-wide">TEST INSTRUCTION</h3>
           </button>
 
-          <div class="grid grid-cols-2 gap-3">
-            <button
-              type="button"
-              @click="handleConfirm"
-              class="bg-green-500 text-black text-lg font-black py-3.5 px-4 rounded-xl border-4 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:bg-green-400 active:translate-y-1 active:shadow-none transition-all cursor-pointer"
-            >
-              <h3 class="uppercase tracking-wide">KONFIRMASI</h3>
-            </button>
-
-            <button
-              type="button"
-              @click="handleCancel"
-              class="bg-red-600 text-white text-lg font-black py-3.5 px-4 rounded-xl border-4 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:bg-red-700 active:translate-y-1 active:shadow-none transition-all cursor-pointer"
-            >
-              <h3 class="uppercase tracking-wide">BATALKAN</h3>
-            </button>
-          </div>
+          <button
+            type="button"
+            @click="handleConfirm"
+            class="w-full bg-green-500 text-black text-lg font-black py-3.5 px-4 rounded-xl border-4 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:bg-green-400 active:translate-y-1 active:shadow-none transition-all cursor-pointer"
+          >
+            <h3 class="uppercase tracking-wide">KONFIRMASI</h3>
+          </button>
         </div>
       </div>
     </div>
@@ -119,14 +109,6 @@ const props = defineProps({
     default: null,
   },
   func: {
-    type: Function,
-    default: null,
-  },
-  reverseFunction: {
-    type: Function,
-    default: null,
-  },
-  reverseFunc: {
     type: Function,
     default: null,
   },
@@ -184,7 +166,7 @@ const props = defineProps({
   },
 });
 
-const emit = defineEmits(["test", "confirm", "cancel", "reverse"]);
+const emit = defineEmits(["test", "confirm"]);
 
 const isOpen = ref(false);
 const testExecuted = ref(false);
@@ -224,10 +206,7 @@ function getInputMode(param) {
 
 function initInputValues() {
   configuredParams.value.forEach((p) => {
-    inputValues[p.name] =
-      p.defaultValue !== undefined && p.defaultValue !== null
-        ? p.defaultValue
-        : "";
+    inputValues[p.name] = "";
   });
 }
 
@@ -245,9 +224,19 @@ function closeModal() {
 function getPayload() {
   if (configuredParams.value.length === 0) return null;
   if (configuredParams.value.length === 1) {
-    return inputValues[configuredParams.value[0].name];
+    const val = inputValues[configuredParams.value[0].name];
+    return val !== undefined && val !== null ? String(val).trim() : "";
   }
-  return { ...inputValues };
+  const result = {};
+  let hasAny = false;
+  configuredParams.value.forEach((p) => {
+    const val = inputValues[p.name];
+    if (val !== undefined && val !== null && String(val).trim() !== "") {
+      result[p.name] = String(val).trim();
+      hasAny = true;
+    }
+  });
+  return hasAny ? result : "";
 }
 
 async function handleTest() {
@@ -259,7 +248,6 @@ async function handleTest() {
     emit("test", payload, { ...inputValues });
     testFeedbackText.value = "TEST INSTRUCTION BERHASIL DIJALANKAN";
   } catch (err) {
-    console.error(err);
     testFeedbackText.value = `TEST GAGAL: ${err.message || "ERROR"}`;
   }
   testExecuted.value = true;
@@ -293,32 +281,7 @@ async function handleConfirm() {
     console.error(err);
   }
 
-  try {
-    if (typeof props.func === "function") {
-      await props.func(payload, { ...inputValues });
-    }
-  } catch (err) {
-    console.error(err);
-  }
-
   emit("confirm", historyItem, payload);
-  closeModal();
-}
-
-async function handleCancel() {
-  const payload = getPayload();
-  const reverse = props.reverseFunction || props.reverseFunc;
-
-  try {
-    if (typeof reverse === "function") {
-      await reverse(payload, { ...inputValues });
-    }
-  } catch (err) {
-    console.error(err);
-  }
-
-  emit("cancel", payload, { ...inputValues });
-  emit("reverse", payload, { ...inputValues });
   closeModal();
 }
 

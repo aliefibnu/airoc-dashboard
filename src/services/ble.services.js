@@ -146,6 +146,37 @@ class BleService {
     }
     console.log("[BLE] Data berhasil dikirim.");
   }
+
+  async sendCommand(commandStr) {
+    if (!this.isConnected()) {
+      throw new Error("Perangkat Bluetooth belum terhubung!");
+    }
+    const fullCmd = commandStr.endsWith("\n") ? commandStr : commandStr + "\n";
+    const encoder = new TextEncoder();
+    const data = encoder.encode(fullCmd);
+    const CHUNK_SIZE = 20;
+    for (let i = 0; i < data.length; i += CHUNK_SIZE) {
+      const chunk = data.slice(i, i + CHUNK_SIZE);
+      try {
+        await this.writeCharacteristic(
+          this.serviceUUID,
+          this.characteristicUUID,
+          chunk,
+          true,
+        );
+      } catch {
+        await this.writeCharacteristic(
+          this.serviceUUID,
+          this.characteristicUUID,
+          chunk,
+          false,
+        );
+      }
+      if (data.length > CHUNK_SIZE) {
+        await new Promise((resolve) => setTimeout(resolve, 25));
+      }
+    }
+  }
 }
 
 export default new BleService();
