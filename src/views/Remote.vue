@@ -7,9 +7,6 @@
         <h1 class="text-3xl md:text-4xl font-black uppercase tracking-tight">
           REMOTE DEBUGGING CONTROLLER
         </h1>
-        <p class="text-xs md:text-sm font-bold uppercase tracking-wider text-gray-600 mt-1">
-          KONTROL DAN PENGUJIAN INSTRUKSI ROBOT LEANBOT REAL-TIME
-        </p>
       </div>
 
       <div class="flex flex-wrap items-center gap-3">
@@ -37,16 +34,7 @@
         </div>
 
         <button
-          v-if="!isBleConnected"
-          type="button"
-          @click="connectBle"
-          class="bg-blue-600 text-white font-black text-sm md:text-base py-3 px-5 rounded-2xl border-4 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:bg-blue-700 active:translate-y-1 active:shadow-none transition-all cursor-pointer"
-        >
-          SCAN & HUBUNGKAN
-        </button>
-
-        <button
-          v-else
+          v-if="isBleConnected"
           type="button"
           @click="disconnectBle"
           class="bg-red-600 text-white font-black text-sm md:text-base py-3 px-5 rounded-2xl border-4 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:bg-red-700 active:translate-y-1 active:shadow-none transition-all cursor-pointer"
@@ -59,11 +47,19 @@
     <div
       v-if="statusMessage"
       class="border-4 border-black p-4 rounded-2xl shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] flex items-center justify-between gap-4"
-      :class="statusMessage.includes('Gagal') ? 'bg-red-100 text-red-950' : 'bg-blue-100 text-blue-950'"
+      :class="
+        statusMessage.includes('Gagal')
+          ? 'bg-red-100 text-red-950'
+          : 'bg-blue-100 text-blue-950'
+      "
     >
       <div class="flex items-center gap-3">
-        <span class="text-2xl">{{ statusMessage.includes('Gagal') ? '⚠️' : 'ℹ️' }}</span>
-        <span class="font-black text-sm md:text-base uppercase">{{ statusMessage }}</span>
+        <span class="text-2xl">{{
+          statusMessage.includes("Gagal") ? "⚠️" : "ℹ️"
+        }}</span>
+        <span class="font-black text-sm md:text-base uppercase">{{
+          statusMessage
+        }}</span>
       </div>
       <button
         @click="statusMessage = ''"
@@ -73,14 +69,15 @@
       </button>
     </div>
 
-    <div class="border-4 border-black bg-yellow-50 p-6 md:p-8 rounded-3xl shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] space-y-4">
-      <div class="flex flex-col md:flex-row md:items-center justify-between gap-2 border-b-4 border-black pb-3">
+    <div
+      class="border-4 border-black bg-yellow-50 p-6 md:p-8 rounded-3xl shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] space-y-4"
+    >
+      <div
+        class="flex flex-col md:flex-row md:items-center justify-between gap-2 border-b-4 border-black pb-3"
+      >
         <h2 class="text-xl md:text-2xl font-black uppercase tracking-tight">
           PROD INSTRUCTION STRING
         </h2>
-        <span class="text-xs font-mono font-black bg-yellow-200 border-2 border-black px-2.5 py-1 rounded-lg">
-          FORMAT: SPEED:5;SCAN_KANAN:10,90;CAPIT;STOP
-        </span>
       </div>
 
       <textarea
@@ -108,14 +105,6 @@
           >
             <h3>SIMPAN INSTRUKSI</h3>
           </button>
-
-          <button
-            type="button"
-            @click="clearInstructionString"
-            class="bg-white text-black font-black uppercase text-base md:text-lg py-3.5 px-5 rounded-xl border-4 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:bg-gray-100 active:translate-y-1 active:shadow-none transition-all cursor-pointer"
-          >
-            <h3>BERSIHKAN</h3>
-          </button>
         </div>
 
         <button
@@ -127,29 +116,18 @@
           <h3>EMERGENCY STOP</h3>
         </button>
       </div>
-
-      <div v-if="lastSentCommand" class="pt-2">
-        <span class="text-xs font-mono font-black uppercase bg-white border-2 border-black px-3 py-1.5 rounded-lg inline-block">
-          PERINTAH TERAKHIR TERKIRIM: {{ lastSentCommand }}
-        </span>
-      </div>
     </div>
 
     <div class="space-y-6">
-      <div class="border-b-4 border-black pb-3">
-        <h2 class="text-2xl md:text-3xl font-black uppercase tracking-tight">
-          PANEL TOMBOL DEBUG INSTRUCTION
-        </h2>
-        <p class="text-xs md:text-sm font-bold uppercase text-gray-600 mt-0.5">
-          KLIK TOMBOL UNTUK MEMBUKA POPUP TEST ATAU KONFIRMASI KE DALAM PROD
-        </p>
-      </div>
-
       <div class="space-y-4">
-        <h3 class="text-lg font-black uppercase tracking-wider text-black border-l-4 border-black pl-3">
+        <h3
+          class="text-lg font-black uppercase tracking-wider text-black border-l-4 border-black pl-3"
+        >
           1. GERAKAN DASAR
         </h3>
-        <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+        <div
+          class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4"
+        >
           <InstructionButton
             label="MAJU"
             alias="MAJU"
@@ -241,10 +219,14 @@
       </div>
 
       <div class="space-y-4">
-        <h3 class="text-lg font-black uppercase tracking-wider text-black border-l-4 border-black pl-3">
+        <h3
+          class="text-lg font-black uppercase tracking-wider text-black border-l-4 border-black pl-3"
+        >
           2. ULTRASONIC & PENCARIAN OBJEK
         </h3>
-        <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+        <div
+          class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4"
+        >
           <InstructionButton
             label="UKUR JARAK"
             alias="UKUR_JARAK"
@@ -366,10 +348,14 @@
       </div>
 
       <div class="space-y-4">
-        <h3 class="text-lg font-black uppercase tracking-wider text-black border-l-4 border-black pl-3">
+        <h3
+          class="text-lg font-black uppercase tracking-wider text-black border-l-4 border-black pl-3"
+        >
           3. GRIPPER & MANIPULASI
         </h3>
-        <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+        <div
+          class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4"
+        >
           <InstructionButton
             label="CAPIT (TUTUP)"
             alias="CAPIT"
@@ -389,10 +375,14 @@
       </div>
 
       <div class="space-y-4">
-        <h3 class="text-lg font-black uppercase tracking-wider text-black border-l-4 border-black pl-3">
+        <h3
+          class="text-lg font-black uppercase tracking-wider text-black border-l-4 border-black pl-3"
+        >
           4. MANUVER ZONA
         </h3>
-        <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+        <div
+          class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4"
+        >
           <InstructionButton
             label="GESER KANAN"
             alias="GESER_KANAN"
@@ -422,10 +412,14 @@
       </div>
 
       <div class="space-y-4">
-        <h3 class="text-lg font-black uppercase tracking-wider text-black border-l-4 border-black pl-3">
+        <h3
+          class="text-lg font-black uppercase tracking-wider text-black border-l-4 border-black pl-3"
+        >
           5. BUZZER & LED FEEDBACK
         </h3>
-        <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+        <div
+          class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4"
+        >
           <InstructionButton
             label="BUNYI BUZZER"
             alias="BUNYI"
@@ -516,10 +510,14 @@
       </div>
 
       <div class="space-y-4">
-        <h3 class="text-lg font-black uppercase tracking-wider text-black border-l-4 border-black pl-3">
+        <h3
+          class="text-lg font-black uppercase tracking-wider text-black border-l-4 border-black pl-3"
+        >
           6. KESELAMATAN & AKHIR EKSEKUSI
         </h3>
-        <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+        <div
+          class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4"
+        >
           <InstructionButton
             label="EMERGENCY STOP"
             alias="EMERGENCY_STOP"
@@ -636,7 +634,8 @@ async function executeTestInstruction(name, payload) {
 async function runProdMission() {
   const str = manualInstructionString.value.trim();
   if (!str) {
-    statusMessage.value = "String instruksi kosong! Silakan tambahkan instruksi terlebih dahulu.";
+    statusMessage.value =
+      "String instruksi kosong! Silakan tambahkan instruksi terlebih dahulu.";
     return;
   }
   const prodCmd = str.toUpperCase().startsWith("PROD") ? str : `PROD;${str}`;
@@ -660,12 +659,5 @@ function saveManualInstruction() {
       statusMessage.value = "";
     }
   }, 2500);
-}
-
-function clearInstructionString() {
-  remoteDebugService.clearAll();
-  manualInstructionString.value = "";
-  instructionList.value = [];
-  statusMessage.value = "String instruksi dibersihkan.";
 }
 </script>
