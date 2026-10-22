@@ -245,7 +245,7 @@
         "
         class="bg-blue-600 text-white text-2xl font-black py-6 rounded-2xl border-4 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:bg-blue-700 active:translate-y-1 active:shadow-none transition-all disabled:bg-gray-400 disabled:shadow-none cursor-pointer disabled:cursor-not-allowed"
       >
-        {{ scanning ? "SEARCHING..." : "DISCOVER PERIPHERALS" }}
+        {{ scanning ? "SEARCHING..." : "CARI LEANBOT" }}
       </button>
 
       <button
@@ -254,7 +254,7 @@
         class="bg-red-600 text-white text-2xl font-black py-6 rounded-2xl border-4 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:bg-red-700 active:translate-y-1 active:shadow-none transition-all disabled:bg-gray-400 disabled:shadow-none cursor-pointer disabled:cursor-not-allowed"
       >
         {{
-          status === "disconnecting" ? "DISCONNECTING..." : "TERMINATE KONEKSI"
+          status === "disconnecting" ? "DISCONNECTING..." : "PUTUSKAN KONEKSI"
         }}
       </button>
     </div>
@@ -262,7 +262,7 @@
     <div class="space-y-6" v-if="status !== 'connected'">
       <div class="flex justify-between items-center">
         <h2 class="text-3xl font-black uppercase tracking-wide">
-          Perangkat Terdeteksi
+          Hubungkan Perangkat
         </h2>
         <span
           v-if="devices.size > 0"
