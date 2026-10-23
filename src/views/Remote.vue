@@ -120,7 +120,6 @@
       </div>
     </div>
 
-    <!-- DAFTAR TOMBOL INSTRUKSI (DATA-DRIVEN DARI INSTRUCTION_ALIASES) -->
     <div class="space-y-6">
       <div
         v-for="cat in INSTRUCTION_CATEGORIES"

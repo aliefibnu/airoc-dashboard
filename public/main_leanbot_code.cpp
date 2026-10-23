@@ -46,7 +46,6 @@ int currentSpeed = 1000;
 int scanMaxAngle = 90;
 volatile bool emergencyFlag = false;
 
-// Default values (synced from Web via CONFIG or individual commands)
 int defaultMaju = 10;
 int defaultMundur = 10;
 int defaultKanan = 90;
@@ -245,7 +244,7 @@ void scanObject(int dir, int maxDistCm, int maxDeg) {
   }
   LbMotion.setZeroOrigin();
 
-  int step = 2; // Step rotasi diperkecil (2 deg) agar scan rapat dan tidak ada benda terlewat
+  int step = 2;
   bool found = false;
   int foundDist = 0;
 
@@ -306,7 +305,7 @@ void approachObject(int targetCm) {
 
   int stepMm = 5;
   int currentDistanceTraveled = 0;
-  int maxTravelMm = 800; // Batas aman maju maksimal 80 cm
+  int maxTravelMm = 800;
   int missCount = 0;
 
   while (currentDistanceTraveled < maxTravelMm) {
@@ -328,7 +327,6 @@ void approachObject(int targetCm) {
       }
     } else {
       missCount = 0;
-      // Kurangi kecepatan saat mendekati target agar berhenti presisi tanpa overshoot
       if (d - targetCm <= 3 && spd > 350) {
         spd = 350;
         LbMotion.runLR(+spd, +spd);
@@ -361,7 +359,7 @@ void retreatObject(int targetCm) {
 
   int stepMm = 5;
   int currentDistanceTraveled = 0;
-  int maxTravelMm = 800; // Batas aman mundur maksimal 80 cm
+  int maxTravelMm = 800;
   int missCount = 0;
 
   while (currentDistanceTraveled < maxTravelMm) {
@@ -383,7 +381,6 @@ void retreatObject(int targetCm) {
       }
     } else {
       missCount = 0;
-      // Kurangi kecepatan saat hampir mencapai target jarak
       if (targetCm - d <= 3 && spd > 350) {
         spd = 350;
         LbMotion.runLR(-spd, -spd);
@@ -721,11 +718,15 @@ void executeInstruction(const Instruction& inst) {
 
     case OP_CEK_OBJEK: {
       int d = Leanbot.pingCm();
-      if (d > 0 && d <= inst.p1) {
-        Serial.print(F("OBJEK_TERDETEKSI:"));
-        Serial.println(d);
+      int limit = (inst.p1 > 0) ? inst.p1 : defaultCek;
+      if (d > 0 && d <= limit) {
+        LbRGB.fillColor(CRGB::Green);
+        LbRGB.show();
+        playBunyi(3);
       } else {
-        Serial.println(F("TIDAK_ADA_OBJEK"));
+        LbRGB.fillColor(CRGB::Red);
+        LbRGB.show();
+        playBunyi(1);
       }
       break;
     }

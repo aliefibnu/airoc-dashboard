@@ -218,12 +218,10 @@ const displayLabel = computed(() => {
 });
 
 const configuredParams = computed(() => {
-  // Dependency tracking for reactive updates when defaults change
-  // eslint-disable-next-line no-unused-vars
   const _v = defaultsVersion.value;
+  void _v;
   const alias = targetAlias.value;
 
-  // 1. If explicit props.params array provided
   if (Array.isArray(props.params) && props.params.length > 0) {
     return props.params.map((p) => {
       const dynamicDef =
@@ -241,7 +239,6 @@ const configuredParams = computed(() => {
     });
   }
 
-  // 2. If single param explicitly passed via props
   if (
     props.hasParam ||
     props.paramDefault !== null ||
@@ -271,7 +268,6 @@ const configuredParams = computed(() => {
     ];
   }
 
-  // 3. Automatically get params from instruction metadata
   if (instructionDef.value?.params && instructionDef.value.params.length > 0) {
     return instructionDef.value.params.map((p) => {
       const dynamicDef =
@@ -393,7 +389,6 @@ async function handleConfirm() {
   closeModal();
 }
 
-// Warna tombol berasal dari data instruction-aliases.js jika tidak dispesifikasikan di props
 const buttonColorClass = computed(() => {
   const colorName = props.color || instructionDef.value?.color || "neutral";
   switch (colorName.toLowerCase()) {

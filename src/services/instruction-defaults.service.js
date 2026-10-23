@@ -8,7 +8,6 @@ class InstructionDefaultsService {
     this.listeners = new Set();
     this.defaults = this._loadDefaults();
 
-    // Auto-sync ke robot Leanbot saat Bluetooth berhasil terhubung
     BleService.onConnect(async (device) => {
       console.log(
         `[InstructionDefaults] BLE terhubung ke "${device.name || device.id}", menyinkronkan default value...`,
@@ -117,9 +116,6 @@ class InstructionDefaultsService {
     const tungguVal = this.getDefault("TUNGGU", "ms") ?? 1000;
     const bunyiVal = this.getDefault("BUNYI", "jumlah") ?? 1;
 
-    // Perintah sinkronisasi default value ke Leanbot:
-    // 1. SPEED & BATAS_SCAN mengubah variabel konfigurasi global Leanbot
-    // 2. CONFIG:<target>,<val> mengubah nilai default instruction pada Leanbot firmware
     const parts = [
       `SPEED:${speedVal}`,
       `BATAS_SCAN:${scanAngle}`,

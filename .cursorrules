@@ -1,0 +1,4 @@
+# Cursor Rules
+- NEVER write comments in code files under any circumstance.
+- Do not output single-line comments (//), multi-line comments (/* */), or HTML comments (<!-- -->).
+- Keep all code comment-free, clean, and self-documenting.

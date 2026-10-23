@@ -8,7 +8,6 @@ export const INSTRUCTION_CATEGORIES = [
 ];
 
 export const INSTRUCTION_ALIASES = [
-  // 1. GERAKAN DASAR
   {
     name: "MAJU",
     alias: "MAJU",
@@ -129,8 +128,6 @@ export const INSTRUCTION_ALIASES = [
       },
     ],
   },
-
-  // 2. ULTRASONIC & PENCARIAN OBJEK
   {
     name: "UKUR_JARAK",
     alias: "UKUR_JARAK",
@@ -273,8 +270,6 @@ export const INSTRUCTION_ALIASES = [
     color: "neutral",
     params: [],
   },
-
-  // 3. GRIPPER & MANIPULASI
   {
     name: "CAPIT",
     alias: "CAPIT",
@@ -313,8 +308,6 @@ export const INSTRUCTION_ALIASES = [
       },
     ],
   },
-
-  // 4. MANUVER ZONA
   {
     name: "GESER_KANAN",
     alias: "GESER_KANAN",
@@ -351,8 +344,6 @@ export const INSTRUCTION_ALIASES = [
       },
     ],
   },
-
-  // 5. BUZZER & LED FEEDBACK
   {
     name: "BUNYI",
     alias: "BUNYI",
@@ -455,8 +446,6 @@ export const INSTRUCTION_ALIASES = [
       },
     ],
   },
-
-  // 6. KESELAMATAN & AKHIR EKSEKUSI
   {
     name: "EMERGENCY_STOP",
     alias: "EMERGENCY_STOP",
