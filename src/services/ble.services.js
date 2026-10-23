@@ -9,6 +9,7 @@ class BleService {
     this.serviceUUID = BLE_SERVICE;
     this.characteristicUUID = BLE_CHARACTERISTIC;
     this.disconnectListeners = new Set();
+    this.connectListeners = new Set();
     this._onGattDisconnected = this._onGattDisconnected.bind(this);
   }
 
@@ -30,6 +31,13 @@ class BleService {
     this.disconnectListeners.add(listener);
     return () => {
       this.disconnectListeners.delete(listener);
+    };
+  }
+
+  onConnect(listener) {
+    this.connectListeners.add(listener);
+    return () => {
+      this.connectListeners.delete(listener);
     };
   }
 
@@ -78,6 +86,14 @@ class BleService {
 
     this.connectedServer = await device.gatt.connect();
     this.connectedDevice = device;
+
+    this.connectListeners.forEach((listener) => {
+      try {
+        listener(device);
+      } catch (e) {
+        console.error("[BLE] Error pada connect listener:", e);
+      }
+    });
 
     return device;
   }

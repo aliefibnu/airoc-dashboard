@@ -351,6 +351,7 @@
 import { ref, computed, onMounted, onUnmounted } from "vue";
 import { useRouter } from "vue-router";
 import BleService from "@/services/ble.services";
+import instructionDefaultsService from "@/services/instruction-defaults.service.js";
 
 const router = useRouter();
 

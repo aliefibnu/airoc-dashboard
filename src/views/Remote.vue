@@ -34,6 +34,16 @@
         </div>
 
         <button
+          v-if="!isBleConnected"
+          type="button"
+          @click="connectBle"
+          class="bg-blue-600 text-white font-black text-sm md:text-base py-3 px-5 rounded-2xl border-4 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:bg-blue-700 active:translate-y-1 active:shadow-none transition-all cursor-pointer flex items-center gap-2"
+        >
+          <span>📡</span>
+          <span>HUBUNGKAN BLE</span>
+        </button>
+
+        <button
           v-if="isBleConnected"
           type="button"
           @click="disconnectBle"
@@ -78,6 +88,15 @@
         <h2 class="text-xl md:text-2xl font-black uppercase tracking-tight">
           PROD INSTRUCTION STRING
         </h2>
+
+        <button
+          type="button"
+          @click="openSettingsModal"
+          class="bg-white text-black font-black uppercase text-xs md:text-sm py-2 px-3.5 rounded-xl border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:bg-gray-100 active:translate-y-0.5 active:shadow-none transition-all cursor-pointer flex items-center gap-1.5 self-start md:self-auto"
+        >
+          <span>⚙️</span>
+          <span>ATUR DEFAULT VALUE</span>
+        </button>
       </div>
 
       <textarea
@@ -118,432 +137,199 @@
       </div>
     </div>
 
+    <!-- DAFTAR TOMBOL INSTRUKSI (DATA-DRIVEN DARI INSTRUCTION_ALIASES) -->
     <div class="space-y-6">
-      <div class="space-y-4">
+      <div
+        v-for="cat in INSTRUCTION_CATEGORIES"
+        :key="cat.id"
+        class="space-y-4"
+      >
         <h3
           class="text-lg font-black uppercase tracking-wider text-black border-l-4 border-black pl-3"
         >
-          1. GERAKAN DASAR
+          {{ cat.title }}
         </h3>
         <div
           class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4"
         >
           <InstructionButton
-            label="MAJU"
-            alias="MAJU"
-            color="green"
-            :has-param="true"
-            param-label="JARAK MAJU (CM)"
-            param-type="number"
-            param-inputmode="numeric"
-            param-default="10"
-            param-placeholder="10 (DEFAULT)"
-            :func="(p) => executeTestInstruction('MAJU', p)"
-          />
-
-          <InstructionButton
-            label="MUNDUR"
-            alias="MUNDUR"
-            color="yellow"
-            :has-param="true"
-            param-label="JARAK MUNDUR (CM)"
-            param-type="number"
-            param-inputmode="numeric"
-            param-default="10"
-            param-placeholder="10 (DEFAULT)"
-            :func="(p) => executeTestInstruction('MUNDUR', p)"
-          />
-
-          <InstructionButton
-            label="BELOK KIRI"
-            alias="KIRI"
-            color="blue"
-            :has-param="true"
-            param-label="SUDUT PUTAR (DERAJAT)"
-            param-type="number"
-            param-inputmode="numeric"
-            param-default="90"
-            param-placeholder="90 (DEFAULT)"
-            :func="(p) => executeTestInstruction('KIRI', p)"
-          />
-
-          <InstructionButton
-            label="BELOK KANAN"
-            alias="KANAN"
-            color="blue"
-            :has-param="true"
-            param-label="SUDUT PUTAR (DERAJAT)"
-            param-type="number"
-            param-inputmode="numeric"
-            param-default="90"
-            param-placeholder="90 (DEFAULT)"
-            :func="(p) => executeTestInstruction('KANAN', p)"
-          />
-
-          <InstructionButton
-            label="STOP MOTOR"
-            alias="STOP"
-            color="red"
-            :has-param="false"
-            :func="() => executeTestInstruction('STOP')"
-          />
-
-          <InstructionButton
-            label="KECEPATAN (SPEED)"
-            alias="SPEED"
-            color="purple"
-            :has-param="true"
-            param-label="LEVEL (1-10)"
-            param-type="number"
-            param-inputmode="numeric"
-            param-default="5"
-            param-min="1"
-            param-max="10"
-            param-placeholder="5 (DEFAULT)"
-            :func="(p) => executeTestInstruction('SPEED', p)"
-          />
-
-          <InstructionButton
-            label="TUNGGU (DELAY)"
-            alias="TUNGGU"
-            color="yellow"
-            :has-param="true"
-            param-label="DURASI TUNGGU (MS)"
-            param-type="number"
-            param-inputmode="numeric"
-            param-default="1000"
-            param-placeholder="1000 (DEFAULT)"
-            :func="(p) => executeTestInstruction('TUNGGU', p)"
-          />
-        </div>
-      </div>
-
-      <div class="space-y-4">
-        <h3
-          class="text-lg font-black uppercase tracking-wider text-black border-l-4 border-black pl-3"
-        >
-          2. ULTRASONIC & PENCARIAN OBJEK
-        </h3>
-        <div
-          class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4"
-        >
-          <InstructionButton
-            label="UKUR JARAK"
-            alias="UKUR_JARAK"
-            color="white"
-            :has-param="false"
-            :func="() => executeTestInstruction('UKUR_JARAK')"
-          />
-
-          <InstructionButton
-            label="SCAN KANAN"
-            alias="SCAN_KANAN"
-            color="blue"
-            :params="[
-              {
-                name: 'jarak_cm',
-                label: 'JARAK MAKSIMUM (CM)',
-                type: 'number',
-                inputmode: 'numeric',
-                defaultValue: 20,
-                placeholder: '20 (DEFAULT)',
-              },
-              {
-                name: 'sudut_maks',
-                label: 'SUDUT SCAN (DEG)',
-                type: 'number',
-                inputmode: 'numeric',
-                defaultValue: 90,
-                placeholder: '90 (DEFAULT)',
-              },
-            ]"
-            :func="(p) => executeTestInstruction('SCAN_KANAN', p)"
-          />
-
-          <InstructionButton
-            label="SCAN KIRI"
-            alias="SCAN_KIRI"
-            color="blue"
-            :params="[
-              {
-                name: 'jarak_cm',
-                label: 'JARAK MAKSIMUM (CM)',
-                type: 'number',
-                inputmode: 'numeric',
-                defaultValue: 20,
-                placeholder: '20 (DEFAULT)',
-              },
-              {
-                name: 'sudut_maks',
-                label: 'SUDUT SCAN (DEG)',
-                type: 'number',
-                inputmode: 'numeric',
-                defaultValue: 90,
-                placeholder: '90 (DEFAULT)',
-              },
-            ]"
-            :func="(p) => executeTestInstruction('SCAN_KIRI', p)"
-          />
-
-          <InstructionButton
-            label="DEKATI OBJEK"
-            alias="DEKATI_OBJEK"
-            color="green"
-            :has-param="true"
-            param-label="JARAK TARGET AKHIR (CM)"
-            param-type="number"
-            param-inputmode="numeric"
-            param-default="6"
-            param-placeholder="6 (DEFAULT)"
-            :func="(p) => executeTestInstruction('DEKATI_OBJEK', p)"
-          />
-
-          <InstructionButton
-            label="JAUHI OBJEK"
-            alias="JAUHI_OBJEK"
-            color="yellow"
-            :has-param="true"
-            param-label="JARAK TARGET AKHIR (CM)"
-            param-type="number"
-            param-inputmode="numeric"
-            param-default="20"
-            param-placeholder="20 (DEFAULT)"
-            :func="(p) => executeTestInstruction('JAUHI_OBJEK', p)"
-          />
-
-          <InstructionButton
-            label="CEK OBJEK"
-            alias="CEK_OBJEK"
-            color="white"
-            :has-param="true"
-            param-label="JARAK CEK (CM)"
-            param-type="number"
-            param-inputmode="numeric"
-            param-default="20"
-            param-placeholder="20 (DEFAULT)"
-            :func="(p) => executeTestInstruction('CEK_OBJEK', p)"
-          />
-
-          <InstructionButton
-            label="BATAS SCAN"
-            alias="BATAS_SCAN"
-            color="purple"
-            :has-param="true"
-            param-label="BATAS SUDUT (DEG)"
-            param-type="number"
-            param-inputmode="numeric"
-            param-default="90"
-            param-placeholder="90 (DEFAULT)"
-            :func="(p) => executeTestInstruction('BATAS_SCAN', p)"
-          />
-
-          <InstructionButton
-            label="LAPOR JARAK"
-            alias="LAPOR_JARAK"
-            color="white"
-            :has-param="false"
-            :func="() => executeTestInstruction('LAPOR_JARAK')"
-          />
-        </div>
-      </div>
-
-      <div class="space-y-4">
-        <h3
-          class="text-lg font-black uppercase tracking-wider text-black border-l-4 border-black pl-3"
-        >
-          3. GRIPPER & MANIPULASI
-        </h3>
-        <div
-          class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4"
-        >
-          <InstructionButton
-            label="CAPIT (TUTUP)"
-            alias="CAPIT"
-            color="red"
-            :has-param="false"
-            :func="() => executeTestInstruction('CAPIT')"
-          />
-
-          <InstructionButton
-            label="LEPAS (BUKA)"
-            alias="LEPAS"
-            color="green"
-            :has-param="false"
-            :func="() => executeTestInstruction('LEPAS')"
-          />
-        </div>
-      </div>
-
-      <div class="space-y-4">
-        <h3
-          class="text-lg font-black uppercase tracking-wider text-black border-l-4 border-black pl-3"
-        >
-          4. MANUVER ZONA
-        </h3>
-        <div
-          class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4"
-        >
-          <InstructionButton
-            label="GESER KANAN"
-            alias="GESER_KANAN"
-            color="blue"
-            :has-param="true"
-            param-label="JARAK GESER (CM)"
-            param-type="number"
-            param-inputmode="numeric"
-            param-default="10"
-            param-placeholder="10 (DEFAULT)"
-            :func="(p) => executeTestInstruction('GESER_KANAN', p)"
-          />
-
-          <InstructionButton
-            label="GESER KIRI"
-            alias="GESER_KIRI"
-            color="blue"
-            :has-param="true"
-            param-label="JARAK GESER (CM)"
-            param-type="number"
-            param-inputmode="numeric"
-            param-default="10"
-            param-placeholder="10 (DEFAULT)"
-            :func="(p) => executeTestInstruction('GESER_KIRI', p)"
-          />
-        </div>
-      </div>
-
-      <div class="space-y-4">
-        <h3
-          class="text-lg font-black uppercase tracking-wider text-black border-l-4 border-black pl-3"
-        >
-          5. BUZZER & LED FEEDBACK
-        </h3>
-        <div
-          class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4"
-        >
-          <InstructionButton
-            label="BUNYI BUZZER"
-            alias="BUNYI"
-            color="yellow"
-            :has-param="true"
-            param-label="JUMLAH KALI BUNYI"
-            param-type="number"
-            param-inputmode="numeric"
-            param-default="1"
-            param-placeholder="1 (DEFAULT)"
-            :func="(p) => executeTestInstruction('BUNYI', p)"
-          />
-
-          <InstructionButton
-            label="BEEP NADA"
-            alias="BEEP"
-            color="yellow"
-            :params="[
-              {
-                name: 'frekuensi',
-                label: 'FREKUENSI (HZ)',
-                type: 'number',
-                inputmode: 'numeric',
-                defaultValue: 1500,
-                placeholder: '1500 (DEFAULT)',
-              },
-              {
-                name: 'durasi_ms',
-                label: 'DURASI (MS)',
-                type: 'number',
-                inputmode: 'numeric',
-                defaultValue: 100,
-                placeholder: '100 (DEFAULT)',
-              },
-            ]"
-            :func="(p) => executeTestInstruction('BEEP', p)"
-          />
-
-          <InstructionButton
-            label="LED WARNA"
-            alias="LED_WARNA"
-            color="purple"
-            :has-param="true"
-            param-label="WARNA (MERAH/HIJAU/BIRU/KUNING/PUTIH/OFF)"
-            param-type="text"
-            param-default="PUTIH"
-            param-placeholder="PUTIH (DEFAULT)"
-            :func="(p) => executeTestInstruction('LED_WARNA', p)"
-          />
-
-          <InstructionButton
-            label="LED KEDIP"
-            alias="LED_KEDIP"
-            color="purple"
-            :params="[
-              {
-                name: 'jumlah',
-                label: 'JUMLAH KEDIP',
-                type: 'number',
-                inputmode: 'numeric',
-                defaultValue: 3,
-                placeholder: '3 (DEFAULT)',
-              },
-              {
-                name: 'interval_ms',
-                label: 'INTERVAL (MS)',
-                type: 'number',
-                inputmode: 'numeric',
-                defaultValue: 200,
-                placeholder: '200 (DEFAULT)',
-              },
-            ]"
-            :func="(p) => executeTestInstruction('LED_KEDIP', p)"
-          />
-
-          <InstructionButton
-            label="MODE LED"
-            alias="LED"
-            color="white"
-            :has-param="true"
-            param-label="MODE (ON/OFF/SMILE/FROWN/LEFT/RIGHT)"
-            param-type="text"
-            param-default="ON"
-            param-placeholder="ON (DEFAULT)"
-            :func="(p) => executeTestInstruction('LED', p)"
-          />
-        </div>
-      </div>
-
-      <div class="space-y-4">
-        <h3
-          class="text-lg font-black uppercase tracking-wider text-black border-l-4 border-black pl-3"
-        >
-          6. KESELAMATAN & AKHIR EKSEKUSI
-        </h3>
-        <div
-          class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4"
-        >
-          <InstructionButton
-            label="EMERGENCY STOP"
-            alias="EMERGENCY_STOP"
-            color="red"
-            :has-param="false"
-            :func="() => executeTestInstruction('EMERGENCY_STOP')"
-          />
-
-          <InstructionButton
-            label="END EKSEKUSI"
-            alias="END"
-            color="white"
-            :has-param="false"
-            :func="() => executeTestInstruction('END')"
+            v-for="item in getInstructionsByCategory(cat.id)"
+            :key="item.alias"
+            :alias="item.alias"
+            :label="item.label"
+            :func="(p) => executeTestInstruction(item.alias, p)"
           />
         </div>
       </div>
     </div>
+
+    <!-- MODAL PENGATURAN DEFAULT VALUE -->
+    <teleport to="body">
+      <div
+        v-if="isSettingsOpen"
+        class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs select-none"
+        @click.self="closeSettingsModal"
+      >
+        <div
+          class="bg-yellow-50 border-4 border-black rounded-3xl p-6 md:p-8 max-w-4xl w-full max-h-[90vh] flex flex-col shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] space-y-6"
+        >
+          <div
+            class="flex items-center justify-between border-b-4 border-black pb-4 gap-3 shrink-0"
+          >
+            <div>
+              <h2
+                class="text-2xl md:text-3xl font-black uppercase tracking-tight text-black"
+              >
+                PENGATURAN DEFAULT VALUE INSTRUKSI
+              </h2>
+              <p class="text-xs md:text-sm font-bold text-gray-700 mt-1">
+                Disimpan di LocalStorage & otomatis disinkronkan ke Leanbot via
+                Bluetooth.
+              </p>
+            </div>
+            <button
+              type="button"
+              @click="closeSettingsModal"
+              class="border-2 border-black font-black text-xl px-2.5 py-0.5 rounded-xl bg-red-500 text-white hover:bg-red-600 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] active:translate-y-0.5 active:shadow-none transition-all cursor-pointer shrink-0"
+            >
+              ✕
+            </button>
+          </div>
+
+          <div class="overflow-y-auto pr-2 space-y-6 flex-1 select-text">
+            <div
+              class="p-3.5 rounded-xl border-2 border-black flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs font-black uppercase"
+              :class="
+                isBleConnected
+                  ? 'bg-green-100 text-green-950'
+                  : 'bg-amber-100 text-amber-950'
+              "
+            >
+              <span class="flex items-center gap-2">
+                <span
+                  class="w-3 h-3 rounded-full border border-black"
+                  :class="
+                    isBleConnected ? 'bg-green-500 animate-ping' : 'bg-gray-400'
+                  "
+                ></span>
+                {{
+                  isBleConnected
+                    ? `Bluetooth Terhubung (${connectedDeviceName}): Perubahan akan langsung disinkronkan ke robot.`
+                    : "Bluetooth Belum Terhubung: Nilai tersimpan di browser & disinkronkan otomatis saat connect."
+                }}
+              </span>
+
+              <button
+                v-if="isBleConnected"
+                type="button"
+                @click="manualSyncDefaults"
+                class="bg-blue-600 text-white px-3 py-1 rounded-lg border border-black hover:bg-blue-700 active:translate-y-0.5 self-start sm:self-auto cursor-pointer"
+              >
+                SYNC SEKARANG
+              </button>
+            </div>
+
+            <div
+              v-for="cat in paramCategories"
+              :key="cat.id"
+              class="space-y-3"
+            >
+              <h4
+                class="text-sm font-black uppercase tracking-wider text-black border-l-4 border-black pl-2"
+              >
+                {{ cat.title }}
+              </h4>
+              <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+                <div
+                  v-for="item in cat.items"
+                  :key="item.alias"
+                  class="bg-white border-2 border-black p-3.5 rounded-xl shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] space-y-2.5"
+                >
+                  <div class="flex items-center justify-between border-b pb-1.5">
+                    <span class="font-black text-sm uppercase truncate">{{
+                      item.label
+                    }}</span>
+                    <span
+                      class="text-[10px] font-mono font-bold bg-gray-100 border border-black px-1.5 py-0.5 rounded ml-2"
+                    >
+                      {{ item.alias }}
+                    </span>
+                  </div>
+
+                  <div
+                    v-for="p in item.params"
+                    :key="p.name"
+                    class="space-y-1"
+                  >
+                    <label
+                      class="text-[11px] font-black uppercase text-gray-700 block"
+                    >
+                      {{ p.label || p.name }}
+                    </label>
+                    <input
+                      v-model="editDefaultsForm[item.alias][p.name]"
+                      :type="p.type || 'text'"
+                      :inputmode="
+                        p.inputmode ||
+                        (p.type === 'number' ? 'numeric' : 'text')
+                      "
+                      :min="p.min"
+                      :max="p.max"
+                      :step="p.step"
+                      class="w-full bg-yellow-50 border-2 border-black rounded-lg p-2 text-sm font-black font-mono focus:outline-none focus:bg-white shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div
+            class="pt-4 border-t-4 border-black flex flex-wrap items-center justify-between gap-3 shrink-0"
+          >
+            <button
+              type="button"
+              @click="resetDefaultsToStandard"
+              class="bg-gray-200 text-black font-black uppercase text-xs md:text-sm py-3 px-4 rounded-xl border-2 border-black hover:bg-gray-300 active:translate-y-0.5 transition-all cursor-pointer"
+            >
+              🔄 RESET KE STANDAR
+            </button>
+
+            <div class="flex items-center gap-3">
+              <button
+                type="button"
+                @click="closeSettingsModal"
+                class="bg-white text-black font-black uppercase text-xs md:text-sm py-3 px-4 rounded-xl border-2 border-black hover:bg-gray-100 active:translate-y-0.5 transition-all cursor-pointer"
+              >
+                BATAL
+              </button>
+
+              <button
+                type="button"
+                @click="saveCustomDefaults"
+                class="bg-green-500 text-black font-black uppercase text-sm md:text-base py-3 px-6 rounded-xl border-4 border-black shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] hover:bg-green-400 active:translate-y-0.5 active:shadow-none transition-all cursor-pointer flex items-center gap-2"
+              >
+                <span>💾</span>
+                <span>SIMPAN & SYNC KE LEANBOT</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </teleport>
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted, onUnmounted } from "vue";
+import { ref, reactive, computed, onMounted, onUnmounted } from "vue";
 import InstructionButton from "@/components/InstructionButton.vue";
 import remoteDebugService from "@/services/remote-debug.service.js";
 import BleService from "@/services/ble.services.js";
+import instructionDefaultsService from "@/services/instruction-defaults.service.js";
+import {
+  INSTRUCTION_CATEGORIES,
+  INSTRUCTION_ALIASES,
+} from "@/data/instruction-aliases.js";
 
 const manualInstructionString = ref("");
 const instructionList = ref([]);
@@ -551,6 +337,9 @@ const isBleConnected = ref(false);
 const connectedDeviceName = ref("");
 const statusMessage = ref("");
 const lastSentCommand = ref("");
+
+const isSettingsOpen = ref(false);
+const editDefaultsForm = reactive({});
 
 let unsubscribeState = null;
 let removeDisconnectListener = null;
@@ -574,6 +363,100 @@ onUnmounted(() => {
   if (removeDisconnectListener) removeDisconnectListener();
 });
 
+function getInstructionsByCategory(catId) {
+  return INSTRUCTION_ALIASES.filter((item) => item.categoryId === catId);
+}
+
+const paramCategories = computed(() => {
+  return INSTRUCTION_CATEGORIES.map((cat) => {
+    const items = INSTRUCTION_ALIASES.filter(
+      (item) =>
+        item.categoryId === cat.id &&
+        Array.isArray(item.params) &&
+        item.params.length > 0,
+    );
+    return {
+      id: cat.id,
+      title: cat.title,
+      items,
+    };
+  }).filter((cat) => cat.items.length > 0);
+});
+
+function initEditDefaultsForm() {
+  const currentDefaults = instructionDefaultsService.getAllDefaults();
+  INSTRUCTION_ALIASES.forEach((item) => {
+    if (Array.isArray(item.params) && item.params.length > 0) {
+      if (!editDefaultsForm[item.alias]) {
+        editDefaultsForm[item.alias] = {};
+      }
+      item.params.forEach((p) => {
+        const val = currentDefaults[item.alias]?.[p.name];
+        editDefaultsForm[item.alias][p.name] =
+          val !== undefined ? val : p.defaultValue !== undefined ? p.defaultValue : "";
+      });
+    }
+  });
+}
+
+function openSettingsModal() {
+  initEditDefaultsForm();
+  isSettingsOpen.value = true;
+}
+
+function closeSettingsModal() {
+  isSettingsOpen.value = false;
+}
+
+async function saveCustomDefaults() {
+  const result = instructionDefaultsService.saveDefaults(editDefaultsForm, true);
+  closeSettingsModal();
+  statusMessage.value = "DEFAULT VALUES DISIMPAN KE LOCALSTORAGE";
+
+  if (isBleConnected.value) {
+    try {
+      const syncRes = await result.syncPromise;
+      if (syncRes && syncRes.success) {
+        statusMessage.value =
+          "DEFAULT VALUES DISIMPAN & BERHASIL DISINKRONKAN KE LEANBOT!";
+      }
+    } catch (e) {
+      statusMessage.value = `Default values disimpan, namun sync BLE gagal: ${e.message || e}`;
+    }
+  }
+
+  setTimeout(() => {
+    if (statusMessage.value.includes("DEFAULT VALUES")) {
+      statusMessage.value = "";
+    }
+  }, 3500);
+}
+
+function resetDefaultsToStandard() {
+  instructionDefaultsService.resetToBaselines(true);
+  initEditDefaultsForm();
+  statusMessage.value = "DEFAULT VALUE DIRESET KE NILAI STANDAR";
+  setTimeout(() => {
+    if (statusMessage.value.includes("DIRESET")) {
+      statusMessage.value = "";
+    }
+  }, 2500);
+}
+
+async function manualSyncDefaults() {
+  try {
+    statusMessage.value = "Menyinkronkan default value ke Leanbot...";
+    const res = await instructionDefaultsService.syncToLeanbot();
+    if (res.success) {
+      statusMessage.value = "BERHASIL MENYINKRONKAN DEFAULT VALUE KE LEANBOT!";
+    } else {
+      statusMessage.value = `Sync gagal: ${res.reason}`;
+    }
+  } catch (err) {
+    statusMessage.value = `Gagal sync ke Leanbot: ${err.message || err}`;
+  }
+}
+
 function refreshState() {
   const state = remoteDebugService.readState();
   manualInstructionString.value = state.instructionString;
@@ -595,7 +478,7 @@ async function connectBle() {
       statusMessage.value = "Menghubungkan ke robot...";
       await BleService.connectDevice(firstId);
       checkBle();
-      statusMessage.value = `Berhasil terhubung ke ${connectedDeviceName.value || "Robot"}!`;
+      statusMessage.value = `Berhasil terhubung ke ${connectedDeviceName.value || "Robot"}! Default value otomatis disinkronkan.`;
     }
   } catch (err) {
     statusMessage.value = `Gagal menghubungkan BLE: ${err.message || err}`;

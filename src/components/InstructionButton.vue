@@ -7,7 +7,7 @@
     :class="buttonColorClass"
   >
     <slot>
-      <span class="tracking-tight">{{ label }}</span>
+      <span class="tracking-tight">{{ displayLabel }}</span>
     </slot>
   </button>
 
@@ -20,9 +20,13 @@
       <div
         class="bg-yellow-50 border-4 border-black rounded-3xl p-6 md:p-8 max-w-md w-full shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] space-y-6"
       >
-        <div class="flex items-center justify-between border-b-4 border-black pb-4 gap-3">
-          <h2 class="text-2xl font-black uppercase tracking-tight text-black truncate">
-            {{ label }}
+        <div
+          class="flex items-center justify-between border-b-4 border-black pb-4 gap-3"
+        >
+          <h2
+            class="text-2xl font-black uppercase tracking-tight text-black truncate"
+          >
+            {{ displayLabel }}
           </h2>
           <button
             type="button"
@@ -44,7 +48,11 @@
                 {{ param.label || param.name }}
               </h3>
               <span
-                v-if="param.defaultValue !== undefined && param.defaultValue !== null && param.defaultValue !== ''"
+                v-if="
+                  param.defaultValue !== undefined &&
+                  param.defaultValue !== null &&
+                  param.defaultValue !== ''
+                "
                 class="text-xs font-mono font-black bg-yellow-200 border border-black px-2 py-0.5 rounded"
               >
                 DEFAULT: {{ param.defaultValue }}
@@ -55,7 +63,12 @@
               v-model="inputValues[param.name]"
               :type="param.type || 'text'"
               :inputmode="getInputMode(param)"
-              :placeholder="param.placeholder || (param.defaultValue !== undefined && param.defaultValue !== '' ? 'Default: ' + param.defaultValue : 'PARAM VALUE...')"
+              :placeholder="
+                param.placeholder ||
+                (param.defaultValue !== undefined && param.defaultValue !== ''
+                  ? 'Default: ' + param.defaultValue
+                  : 'PARAM VALUE...')
+              "
               :min="param.min"
               :max="param.max"
               :step="param.step"
@@ -96,13 +109,15 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed } from "vue";
+import { ref, reactive, computed, onMounted, onUnmounted } from "vue";
 import remoteDebugService from "@/services/remote-debug.service.js";
+import instructionDefaultsService from "@/services/instruction-defaults.service.js";
+import { INSTRUCTION_ALIASES } from "@/data/instruction-aliases.js";
 
 const props = defineProps({
   label: {
     type: String,
-    required: true,
+    default: "",
   },
   alias: {
     type: String,
@@ -134,7 +149,7 @@ const props = defineProps({
   },
   paramDefault: {
     type: [String, Number, Boolean],
-    default: "",
+    default: null,
   },
   paramPlaceholder: {
     type: String,
@@ -158,7 +173,7 @@ const props = defineProps({
   },
   color: {
     type: String,
-    default: "yellow",
+    default: null,
   },
   disabled: {
     type: Boolean,
@@ -172,19 +187,88 @@ const isOpen = ref(false);
 const testExecuted = ref(false);
 const testFeedbackText = ref("TEST EXECUTED");
 const inputValues = reactive({});
+const defaultsVersion = ref(0);
+
+let unsubscribeDefaults = null;
+
+onMounted(() => {
+  unsubscribeDefaults = instructionDefaultsService.subscribe(() => {
+    defaultsVersion.value++;
+  });
+});
+
+onUnmounted(() => {
+  if (unsubscribeDefaults) unsubscribeDefaults();
+});
+
+const targetAlias = computed(() => {
+  return props.alias || props.label;
+});
+
+const instructionDef = computed(() => {
+  if (!targetAlias.value) return null;
+  const aliasUpper = targetAlias.value.trim().toUpperCase();
+  return (
+    INSTRUCTION_ALIASES.find(
+      (a) =>
+        a.alias.toUpperCase() === aliasUpper ||
+        a.name.toUpperCase() === aliasUpper,
+    ) || null
+  );
+});
+
+const displayLabel = computed(() => {
+  if (props.label) return props.label;
+  if (instructionDef.value?.label) return instructionDef.value.label;
+  return targetAlias.value || "CMD";
+});
 
 const configuredParams = computed(() => {
+  // Dependency tracking for reactive updates when defaults change
+  // eslint-disable-next-line no-unused-vars
+  const _v = defaultsVersion.value;
+  const alias = targetAlias.value;
+
+  // 1. If explicit props.params array provided
   if (Array.isArray(props.params) && props.params.length > 0) {
-    return props.params;
+    return props.params.map((p) => {
+      const dynamicDef =
+        alias && instructionDefaultsService.getDefault(alias, p.name);
+      const defVal =
+        dynamicDef !== undefined && dynamicDef !== ""
+          ? dynamicDef
+          : p.defaultValue !== undefined
+            ? p.defaultValue
+            : "";
+      return {
+        ...p,
+        defaultValue: defVal,
+      };
+    });
   }
-  if (props.hasParam || props.paramType !== "text" || props.paramDefault !== "" || props.paramInputmode) {
+
+  // 2. If single param explicitly passed via props
+  if (
+    props.hasParam ||
+    props.paramDefault !== null ||
+    (props.paramType && props.paramType !== "text") ||
+    props.paramInputmode
+  ) {
+    const dynamicDef =
+      alias && instructionDefaultsService.getDefault(alias, "param");
+    const defVal =
+      dynamicDef !== undefined && dynamicDef !== ""
+        ? dynamicDef
+        : props.paramDefault !== null
+          ? props.paramDefault
+          : "";
     return [
       {
         name: "param",
         label: props.paramLabel,
         type: props.paramType,
         inputmode: props.paramInputmode,
-        defaultValue: props.paramDefault,
+        defaultValue: defVal,
         placeholder: props.paramPlaceholder,
         min: props.paramMin,
         max: props.paramMax,
@@ -192,6 +276,25 @@ const configuredParams = computed(() => {
       },
     ];
   }
+
+  // 3. Automatically get params from instruction metadata
+  if (instructionDef.value?.params && instructionDef.value.params.length > 0) {
+    return instructionDef.value.params.map((p) => {
+      const dynamicDef =
+        alias && instructionDefaultsService.getDefault(alias, p.name);
+      const defVal =
+        dynamicDef !== undefined && dynamicDef !== ""
+          ? dynamicDef
+          : p.defaultValue !== undefined
+            ? p.defaultValue
+            : "";
+      return {
+        ...p,
+        defaultValue: defVal,
+      };
+    });
+  }
+
   return [];
 });
 
@@ -224,19 +327,27 @@ function closeModal() {
 function getPayload() {
   if (configuredParams.value.length === 0) return null;
   if (configuredParams.value.length === 1) {
-    const val = inputValues[configuredParams.value[0].name];
-    return val !== undefined && val !== null ? String(val).trim() : "";
+    const p = configuredParams.value[0];
+    const raw = inputValues[p.name];
+    if (raw !== undefined && raw !== null && String(raw).trim() !== "") {
+      return String(raw).trim();
+    }
+    return p.defaultValue !== undefined && p.defaultValue !== null
+      ? String(p.defaultValue).trim()
+      : "";
   }
   const result = {};
-  let hasAny = false;
   configuredParams.value.forEach((p) => {
-    const val = inputValues[p.name];
-    if (val !== undefined && val !== null && String(val).trim() !== "") {
-      result[p.name] = String(val).trim();
-      hasAny = true;
+    const raw = inputValues[p.name];
+    if (raw !== undefined && raw !== null && String(raw).trim() !== "") {
+      result[p.name] = String(raw).trim();
+    } else if (p.defaultValue !== undefined && p.defaultValue !== null) {
+      result[p.name] = String(p.defaultValue).trim();
+    } else {
+      result[p.name] = "";
     }
   });
-  return hasAny ? result : "";
+  return result;
 }
 
 async function handleTest() {
@@ -258,13 +369,16 @@ async function handleTest() {
 
 async function handleConfirm() {
   const payload = getPayload();
-  const targetLabelOrAlias = props.alias || props.label;
+  const targetLabelOrAlias = targetAlias.value;
 
-  const debugState = remoteDebugService.addInstruction(targetLabelOrAlias, payload);
+  const debugState = remoteDebugService.addInstruction(
+    targetLabelOrAlias,
+    payload,
+  );
 
   const historyItem = {
     id: `${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
-    label: props.label,
+    label: displayLabel.value,
     alias: remoteDebugService.getAlias(targetLabelOrAlias),
     params: payload,
     instructionString: debugState.instructionString,
@@ -285,21 +399,25 @@ async function handleConfirm() {
   closeModal();
 }
 
+// Warna tombol berasal dari data instruction-aliases.js jika tidak dispesifikasikan di props
 const buttonColorClass = computed(() => {
-  switch (props.color) {
-    case "blue":
-      return "bg-blue-600 text-white hover:bg-blue-700";
+  const colorName = props.color || instructionDef.value?.color || "neutral";
+  switch (colorName.toLowerCase()) {
     case "green":
       return "bg-green-500 text-black hover:bg-green-400";
     case "red":
       return "bg-red-600 text-white hover:bg-red-700";
+    case "blue":
+      return "bg-blue-600 text-white hover:bg-blue-700";
+    case "amber":
+    case "orange":
+      return "bg-amber-400 text-black hover:bg-amber-300";
     case "purple":
       return "bg-purple-600 text-white hover:bg-purple-700";
+    case "neutral":
     case "white":
-      return "bg-white text-black hover:bg-gray-100";
-    case "yellow":
     default:
-      return "bg-yellow-400 text-black hover:bg-yellow-300";
+      return "bg-white text-black hover:bg-gray-100";
   }
 });
 </script>

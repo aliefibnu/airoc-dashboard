@@ -28,7 +28,8 @@ enum Opcode {
   OP_LAPOR_JARAK,
   OP_EMERGENCY_STOP,
   OP_END,
-  OP_SERVO
+  OP_SERVO,
+  OP_CONFIG
 };
 
 struct Instruction {
@@ -44,6 +45,23 @@ int prodCount = 0;
 int currentSpeed = 1000;
 int scanMaxAngle = 90;
 volatile bool emergencyFlag = false;
+
+// Default values (synced from Web via CONFIG or individual commands)
+int defaultMaju = 10;
+int defaultMundur = 10;
+int defaultKanan = 90;
+int defaultKiri = 90;
+int defaultSpeed = 5;
+int defaultTunggu = 1000;
+int defaultScanDist = 20;
+int defaultDekati = 6;
+int defaultJauhi = 20;
+int defaultCek = 20;
+int defaultGeser = 10;
+int defaultBunyi = 1;
+int defaultBeepFreq = 1500;
+int defaultBeepDur = 100;
+int defaultServo = 90;
 
 char rxBuf[300];
 int rxLen = 0;
@@ -207,40 +225,116 @@ void scanObject(int dir, int maxDistCm, int maxDeg) {
   if (emergencyFlag) return;
   if (maxDistCm <= 0) maxDistCm = 20;
   if (maxDeg <= 0) maxDeg = scanMaxAngle;
+
   int d = Leanbot.pingCm();
   if (d > 0 && d <= maxDistCm) {
     Serial.print(F("OBJEK:"));
     Serial.println(d);
     return;
   }
-  int step = 5;
-  for (int angle = 0; angle < maxDeg; angle += step) {
-    rotateDeg(step, dir);
-    if (emergencyFlag) return;
+
+  int spd = currentSpeed;
+  if (spd <= 0) spd = 600;
+  if (spd > 700) spd = 700;
+
+  if (dir > 0) {
+    LbMotion.runLR(+spd, -spd);
+  } else {
+    LbMotion.runLR(-spd, +spd);
+  }
+  LbMotion.setZeroOrigin();
+
+  int step = 2; // Step rotasi diperkecil (2 deg) agar scan rapat dan tidak ada benda terlewat
+  bool found = false;
+  int foundDist = 0;
+
+  for (int angle = step; angle <= maxDeg; angle += step) {
+    LbMotion.waitUntilRotationDeg(dir * angle);
+    checkEmergency();
+    if (emergencyFlag) break;
+
     d = Leanbot.pingCm();
     if (d > 0 && d <= maxDistCm) {
-      Serial.print(F("OBJEK:"));
-      Serial.println(d);
-      return;
+      found = true;
+      foundDist = d;
+      break;
     }
   }
-  Serial.println(F("OBJEK:TIDAK_ADA"));
+
+  if (!emergencyFlag && !found && (maxDeg % step != 0)) {
+    LbMotion.waitUntilRotationDeg(dir * maxDeg);
+    checkEmergency();
+    if (!emergencyFlag) {
+      d = Leanbot.pingCm();
+      if (d > 0 && d <= maxDistCm) {
+        found = true;
+        foundDist = d;
+      }
+    }
+  }
+
+  LbMotion.stopAndWait();
+
+  if (emergencyFlag) return;
+
+  if (found) {
+    Serial.print(F("OBJEK:"));
+    Serial.println(foundDist);
+  } else {
+    Serial.println(F("OBJEK:TIDAK_ADA"));
+  }
 }
 
 void approachObject(int targetCm) {
   if (emergencyFlag) return;
   if (targetCm <= 0) targetCm = 6;
-  int safetyCount = 60;
-  while (safetyCount-- > 0) {
+
+  int d = Leanbot.pingCm();
+  if (d <= 0 || d <= targetCm || d > 80) {
+    Serial.print(F("JARAK_AKHIR:"));
+    Serial.println(Leanbot.pingCm());
+    return;
+  }
+
+  int spd = currentSpeed;
+  if (spd <= 0) spd = 600;
+  if (spd > 700) spd = 700;
+
+  LbMotion.runLR(+spd, +spd);
+  LbMotion.setZeroOrigin();
+
+  int stepMm = 5;
+  int currentDistanceTraveled = 0;
+  int maxTravelMm = 800; // Batas aman maju maksimal 80 cm
+  int missCount = 0;
+
+  while (currentDistanceTraveled < maxTravelMm) {
+    currentDistanceTraveled += stepMm;
+    LbMotion.waitUntilDistanceMm(currentDistanceTraveled);
     checkEmergency();
     if (emergencyFlag) break;
-    int d = Leanbot.pingCm();
-    if (d <= 0 || d > 80) break;
-    if (d <= targetCm) break;
-    int stepMm = (d - targetCm > 5) ? 20 : 10;
-    moveMm(stepMm, +1);
-    delayInterruptible(50);
+
+    d = Leanbot.pingCm();
+
+    if (d > 0 && d <= targetCm) {
+      break;
+    }
+
+    if (d <= 0 || d > 80) {
+      missCount++;
+      if (missCount >= 3) {
+        break;
+      }
+    } else {
+      missCount = 0;
+      // Kurangi kecepatan saat mendekati target agar berhenti presisi tanpa overshoot
+      if (d - targetCm <= 3 && spd > 350) {
+        spd = 350;
+        LbMotion.runLR(+spd, +spd);
+      }
+    }
   }
+
   LbMotion.stopAndWait();
   Serial.print(F("JARAK_AKHIR:"));
   Serial.println(Leanbot.pingCm());
@@ -249,16 +343,53 @@ void approachObject(int targetCm) {
 void retreatObject(int targetCm) {
   if (emergencyFlag) return;
   if (targetCm <= 0) targetCm = 20;
-  int safetyCount = 60;
-  while (safetyCount-- > 0) {
+
+  int d = Leanbot.pingCm();
+  if (d <= 0 || d >= targetCm || d > 80) {
+    Serial.print(F("JARAK_AKHIR:"));
+    Serial.println(Leanbot.pingCm());
+    return;
+  }
+
+  int spd = currentSpeed;
+  if (spd <= 0) spd = 600;
+  if (spd > 700) spd = 700;
+
+  LbMotion.runLR(-spd, -spd);
+  LbMotion.setZeroOrigin();
+
+  int stepMm = 5;
+  int currentDistanceTraveled = 0;
+  int maxTravelMm = 800; // Batas aman mundur maksimal 80 cm
+  int missCount = 0;
+
+  while (currentDistanceTraveled < maxTravelMm) {
+    currentDistanceTraveled += stepMm;
+    LbMotion.waitUntilDistanceMm(-currentDistanceTraveled);
     checkEmergency();
     if (emergencyFlag) break;
-    int d = Leanbot.pingCm();
-    if (d <= 0 || d >= targetCm) break;
-    int stepMm = (targetCm - d > 5) ? 20 : 10;
-    moveMm(stepMm, -1);
-    delayInterruptible(50);
+
+    d = Leanbot.pingCm();
+
+    if (d >= targetCm && d <= 80) {
+      break;
+    }
+
+    if (d <= 0 || d > 80) {
+      missCount++;
+      if (missCount >= 3) {
+        break;
+      }
+    } else {
+      missCount = 0;
+      // Kurangi kecepatan saat hampir mencapai target jarak
+      if (targetCm - d <= 3 && spd > 350) {
+        spd = 350;
+        LbMotion.runLR(-spd, -spd);
+      }
+    }
   }
+
   LbMotion.stopAndWait();
   Serial.print(F("JARAK_AKHIR:"));
   Serial.println(Leanbot.pingCm());
@@ -376,63 +507,63 @@ bool parseInstruction(char* str, Instruction& inst) {
 
   if (strcasecmp(cmd, "MAJU") == 0 || strcasecmp(cmd, "FWD") == 0) {
     inst.opcode = OP_MAJU;
-    inst.p1 = 10;
+    inst.p1 = defaultMaju;
   } else if (strcasecmp(cmd, "MUNDUR") == 0 || strcasecmp(cmd, "BWD") == 0) {
     inst.opcode = OP_MUNDUR;
-    inst.p1 = 10;
+    inst.p1 = defaultMundur;
   } else if (strcasecmp(cmd, "KANAN") == 0 || strcasecmp(cmd, "RIGHT") == 0) {
     inst.opcode = OP_KANAN;
-    inst.p1 = 90;
+    inst.p1 = defaultKanan;
   } else if (strcasecmp(cmd, "KIRI") == 0 || strcasecmp(cmd, "LEFT") == 0) {
     inst.opcode = OP_KIRI;
-    inst.p1 = 90;
+    inst.p1 = defaultKiri;
   } else if (strcasecmp(cmd, "STOP") == 0 || strcasecmp(cmd, "STP") == 0) {
     inst.opcode = OP_STOP;
   } else if (strcasecmp(cmd, "SPEED") == 0 || strcasecmp(cmd, "SPD") == 0) {
     inst.opcode = OP_SPEED;
-    inst.p1 = 5;
+    inst.p1 = defaultSpeed;
   } else if (strcasecmp(cmd, "TUNGGU") == 0 || strcasecmp(cmd, "DELAY") == 0 || strcasecmp(cmd, "DLY") == 0) {
     inst.opcode = OP_TUNGGU;
-    inst.p1 = 1000;
+    inst.p1 = defaultTunggu;
   } else if (strcasecmp(cmd, "UKUR_JARAK") == 0) {
     inst.opcode = OP_UKUR_JARAK;
   } else if (strcasecmp(cmd, "SCAN_KANAN") == 0) {
     inst.opcode = OP_SCAN_KANAN;
-    inst.p1 = 20;
+    inst.p1 = defaultScanDist;
     inst.p2 = scanMaxAngle;
   } else if (strcasecmp(cmd, "SCAN_KIRI") == 0) {
     inst.opcode = OP_SCAN_KIRI;
-    inst.p1 = 20;
+    inst.p1 = defaultScanDist;
     inst.p2 = scanMaxAngle;
   } else if (strcasecmp(cmd, "DEKATI_OBJEK") == 0) {
     inst.opcode = OP_DEKATI_OBJEK;
-    inst.p1 = 6;
+    inst.p1 = defaultDekati;
   } else if (strcasecmp(cmd, "JAUHI_OBJEK") == 0) {
     inst.opcode = OP_JAUHI_OBJEK;
-    inst.p1 = 20;
+    inst.p1 = defaultJauhi;
   } else if (strcasecmp(cmd, "CEK_OBJEK") == 0) {
     inst.opcode = OP_CEK_OBJEK;
-    inst.p1 = 20;
+    inst.p1 = defaultCek;
   } else if (strcasecmp(cmd, "BATAS_SCAN") == 0) {
     inst.opcode = OP_BATAS_SCAN;
-    inst.p1 = 90;
+    inst.p1 = scanMaxAngle;
   } else if (strcasecmp(cmd, "CAPIT") == 0 || strcasecmp(cmd, "GRIPPER_CLOSE") == 0 || strcasecmp(cmd, "GCL") == 0 || strcasecmp(cmd, "ARM_DOWN") == 0 || strcasecmp(cmd, "ADN") == 0) {
     inst.opcode = OP_CAPIT;
   } else if (strcasecmp(cmd, "LEPAS") == 0 || strcasecmp(cmd, "GRIPPER_OPEN") == 0 || strcasecmp(cmd, "GOP") == 0 || strcasecmp(cmd, "ARM_UP") == 0 || strcasecmp(cmd, "AUP") == 0) {
     inst.opcode = OP_LEPAS;
   } else if (strcasecmp(cmd, "GESER_KANAN") == 0) {
     inst.opcode = OP_GESER_KANAN;
-    inst.p1 = 10;
+    inst.p1 = defaultGeser;
   } else if (strcasecmp(cmd, "GESER_KIRI") == 0) {
     inst.opcode = OP_GESER_KIRI;
-    inst.p1 = 10;
+    inst.p1 = defaultGeser;
   } else if (strcasecmp(cmd, "BUNYI") == 0) {
     inst.opcode = OP_BUNYI;
-    inst.p1 = 1;
+    inst.p1 = defaultBunyi;
   } else if (strcasecmp(cmd, "BEEP") == 0) {
     inst.opcode = OP_BEEP;
-    inst.p1 = 1500;
-    inst.p2 = 100;
+    inst.p1 = defaultBeepFreq;
+    inst.p2 = defaultBeepDur;
   } else if (strcasecmp(cmd, "LED") == 0) {
     inst.opcode = OP_LED;
     inst.p1 = 1;
@@ -452,7 +583,9 @@ bool parseInstruction(char* str, Instruction& inst) {
     inst.opcode = OP_END;
   } else if (strcasecmp(cmd, "SERVO") == 0 || strcasecmp(cmd, "SRV") == 0) {
     inst.opcode = OP_SERVO;
-    inst.p1 = 90;
+    inst.p1 = defaultServo;
+  } else if (strcasecmp(cmd, "CONFIG") == 0 || strcasecmp(cmd, "SET_DEFAULT") == 0 || strcasecmp(cmd, "CFG") == 0) {
+    inst.opcode = OP_CONFIG;
   } else {
     return false;
   }
@@ -479,6 +612,30 @@ bool parseInstruction(char* str, Instruction& inst) {
     } else if (inst.opcode == OP_LED_WARNA) {
       CRGB c = parseColor(params);
       inst.p1 = ((uint32_t)c.r << 16) | ((uint32_t)c.g << 8) | (uint32_t)c.b;
+    } else if (inst.opcode == OP_CONFIG) {
+      char* comma = strchr(params, ',');
+      if (comma != NULL) {
+        *comma = '\0';
+        char* key = params;
+        char* val = comma + 1;
+        while (*val == ' ' || *val == '\t') val++;
+        long numVal = atol(val);
+        if (strcasecmp(key, "MAJU") == 0) { inst.p1 = OP_MAJU; inst.p2 = numVal; }
+        else if (strcasecmp(key, "MUNDUR") == 0) { inst.p1 = OP_MUNDUR; inst.p2 = numVal; }
+        else if (strcasecmp(key, "KANAN") == 0) { inst.p1 = OP_KANAN; inst.p2 = numVal; }
+        else if (strcasecmp(key, "KIRI") == 0) { inst.p1 = OP_KIRI; inst.p2 = numVal; }
+        else if (strcasecmp(key, "SPEED") == 0) { inst.p1 = OP_SPEED; inst.p2 = numVal; }
+        else if (strcasecmp(key, "TUNGGU") == 0) { inst.p1 = OP_TUNGGU; inst.p2 = numVal; }
+        else if (strcasecmp(key, "BATAS_SCAN") == 0 || strcasecmp(key, "SCAN_SUDUT") == 0) { inst.p1 = OP_BATAS_SCAN; inst.p2 = numVal; }
+        else if (strcasecmp(key, "SCAN_JARAK") == 0 || strcasecmp(key, "SCAN") == 0) { inst.p1 = OP_SCAN_KANAN; inst.p2 = numVal; }
+        else if (strcasecmp(key, "DEKATI") == 0 || strcasecmp(key, "DEKATI_OBJEK") == 0) { inst.p1 = OP_DEKATI_OBJEK; inst.p2 = numVal; }
+        else if (strcasecmp(key, "JAUHI") == 0 || strcasecmp(key, "JAUHI_OBJEK") == 0) { inst.p1 = OP_JAUHI_OBJEK; inst.p2 = numVal; }
+        else if (strcasecmp(key, "CEK") == 0 || strcasecmp(key, "CEK_OBJEK") == 0) { inst.p1 = OP_CEK_OBJEK; inst.p2 = numVal; }
+        else if (strcasecmp(key, "GESER") == 0 || strcasecmp(key, "GESER_KANAN") == 0 || strcasecmp(key, "GESER_KIRI") == 0) { inst.p1 = OP_GESER_KANAN; inst.p2 = numVal; }
+        else if (strcasecmp(key, "BUNYI") == 0) { inst.p1 = OP_BUNYI; inst.p2 = numVal; }
+        else if (strcasecmp(key, "BEEP") == 0) { inst.p1 = OP_BEEP; inst.p2 = numVal; }
+        else if (strcasecmp(key, "SERVO") == 0) { inst.p1 = OP_SERVO; inst.p2 = numVal; }
+      }
     } else {
       char* comma = strchr(params, ',');
       if (comma != NULL) {
@@ -663,6 +820,42 @@ void executeInstruction(const Instruction& inst) {
       LbGripper.close(inst.p1);
       delayInterruptible(400);
       break;
+
+    case OP_CONFIG: {
+      long val = inst.p2;
+      switch (inst.p1) {
+        case OP_MAJU: if (val > 0) defaultMaju = val; break;
+        case OP_MUNDUR: if (val > 0) defaultMundur = val; break;
+        case OP_KANAN: if (val > 0) defaultKanan = val; break;
+        case OP_KIRI: if (val > 0) defaultKiri = val; break;
+        case OP_SPEED:
+          if (val > 0) {
+            defaultSpeed = val;
+            if (val <= 10) currentSpeed = map(val, 1, 10, 400, 2000);
+            else if (val <= 255) currentSpeed = map(val, 0, 255, 350, 2000);
+            else currentSpeed = constrain(val, 350, 2000);
+          }
+          break;
+        case OP_BATAS_SCAN:
+          if (val > 0) {
+            defaultScanAngle = val;
+            scanMaxAngle = val;
+          }
+          break;
+        case OP_TUNGGU: if (val > 0) defaultTunggu = val; break;
+        case OP_SCAN_KANAN:
+        case OP_SCAN_KIRI: if (val > 0) defaultScanDist = val; break;
+        case OP_DEKATI_OBJEK: if (val > 0) defaultDekati = val; break;
+        case OP_JAUHI_OBJEK: if (val > 0) defaultJauhi = val; break;
+        case OP_CEK_OBJEK: if (val > 0) defaultCek = val; break;
+        case OP_GESER_KANAN:
+        case OP_GESER_KIRI: if (val > 0) defaultGeser = val; break;
+        case OP_BUNYI: if (val > 0) defaultBunyi = val; break;
+        case OP_BEEP: if (val > 0) defaultBeepFreq = val; break;
+        case OP_SERVO: if (val >= 0) defaultServo = val; break;
+      }
+      break;
+    }
 
     default:
       break;
