@@ -44,19 +44,11 @@
             class="space-y-1.5"
           >
             <div class="flex items-center justify-between">
-              <h3 class="text-sm font-black uppercase tracking-wider text-black">
+              <h3
+                class="text-sm font-black uppercase tracking-wider text-black"
+              >
                 {{ param.label || param.name }}
               </h3>
-              <span
-                v-if="
-                  param.defaultValue !== undefined &&
-                  param.defaultValue !== null &&
-                  param.defaultValue !== ''
-                "
-                class="text-xs font-mono font-black bg-yellow-200 border border-black px-2 py-0.5 rounded"
-              >
-                DEFAULT: {{ param.defaultValue }}
-              </span>
             </div>
 
             <input
@@ -81,7 +73,9 @@
           v-if="testExecuted"
           class="bg-blue-300 border-2 border-black py-2 px-3 rounded-xl text-center"
         >
-          <h4 class="text-xs font-black uppercase tracking-widest text-blue-950">
+          <h4
+            class="text-xs font-black uppercase tracking-widest text-blue-950"
+          >
             {{ testFeedbackText }}
           </h4>
         </div>
@@ -414,10 +408,11 @@ const buttonColorClass = computed(() => {
       return "bg-amber-400 text-black hover:bg-amber-300";
     case "purple":
       return "bg-purple-600 text-white hover:bg-purple-700";
-    case "neutral":
     case "white":
-    default:
       return "bg-white text-black hover:bg-gray-100";
+    case "neutral":
+    default:
+      return "bg-slate-200 text-black hover:bg-slate-300";
   }
 });
 </script>

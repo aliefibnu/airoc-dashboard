@@ -54,6 +54,7 @@ int defaultKiri = 90;
 int defaultSpeed = 5;
 int defaultTunggu = 1000;
 int defaultScanDist = 20;
+int defaultScanAngle = 90;
 int defaultDekati = 6;
 int defaultJauhi = 20;
 int defaultCek = 20;
@@ -546,7 +547,7 @@ bool parseInstruction(char* str, Instruction& inst) {
     inst.p1 = defaultCek;
   } else if (strcasecmp(cmd, "BATAS_SCAN") == 0) {
     inst.opcode = OP_BATAS_SCAN;
-    inst.p1 = scanMaxAngle;
+    inst.p1 = defaultScanAngle;
   } else if (strcasecmp(cmd, "CAPIT") == 0 || strcasecmp(cmd, "GRIPPER_CLOSE") == 0 || strcasecmp(cmd, "GCL") == 0 || strcasecmp(cmd, "ARM_DOWN") == 0 || strcasecmp(cmd, "ADN") == 0) {
     inst.opcode = OP_CAPIT;
   } else if (strcasecmp(cmd, "LEPAS") == 0 || strcasecmp(cmd, "GRIPPER_OPEN") == 0 || strcasecmp(cmd, "GOP") == 0 || strcasecmp(cmd, "ARM_UP") == 0 || strcasecmp(cmd, "AUP") == 0) {
@@ -730,7 +731,10 @@ void executeInstruction(const Instruction& inst) {
     }
 
     case OP_BATAS_SCAN:
-      if (inst.p1 > 0) scanMaxAngle = inst.p1;
+      if (inst.p1 > 0) {
+        scanMaxAngle = inst.p1;
+        defaultScanAngle = inst.p1;
+      }
       break;
 
     case OP_CAPIT:
