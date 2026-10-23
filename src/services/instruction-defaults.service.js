@@ -112,9 +112,11 @@ class InstructionDefaultsService {
     const dekatiVal = this.getDefault("DEKATI_OBJEK", "jarak_akhir_cm") ?? 6;
     const jauhiVal = this.getDefault("JAUHI_OBJEK", "jarak_akhir_cm") ?? 20;
     const cekVal = this.getDefault("CEK_OBJEK", "jarak_cm") ?? 20;
-    const geserVal = this.getDefault("GESER_KANAN", "cm") ?? 10;
     const tungguVal = this.getDefault("TUNGGU", "ms") ?? 1000;
     const bunyiVal = this.getDefault("BUNYI", "jumlah") ?? 1;
+    const followLineVal = this.getDefault("FOLLOW_LINE", "jumlah_simpangan") ?? 1;
+    const majuLineVal = this.getDefault("MAJU_LINE", "max_cm") ?? 50;
+    const mundurLineVal = this.getDefault("MUNDUR_LINE", "max_cm") ?? 50;
 
     const parts = [
       `SPEED:${speedVal}`,
@@ -129,9 +131,11 @@ class InstructionDefaultsService {
       `CONFIG:DEKATI,${dekatiVal}`,
       `CONFIG:JAUHI,${jauhiVal}`,
       `CONFIG:CEK,${cekVal}`,
-      `CONFIG:GESER,${geserVal}`,
       `CONFIG:TUNGGU,${tungguVal}`,
       `CONFIG:BUNYI,${bunyiVal}`,
+      `CONFIG:FOLLOW_LINE,${followLineVal}`,
+      `CONFIG:MAJU_LINE,${majuLineVal}`,
+      `CONFIG:MUNDUR_LINE,${mundurLineVal}`,
     ];
 
     return `PROD;${parts.join(";")}`;

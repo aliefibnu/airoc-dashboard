@@ -44,14 +44,7 @@ String command =
 | `CAPIT`   | —         | Menutup gripper |
 | `LEPAS`   | —         | Membuka gripper |
 
-## 4. Koreksi posisi dan manuver zona
-
-| Instruksi     | Parameter | Fungsi                                           |
-| ------------- | --------- | ------------------------------------------------ |
-| `GESER_KANAN` | `cm`      | Melakukan manuver untuk menggeser balok ke kanan |
-| `GESER_KIRI`  | `cm`      | Melakukan manuver untuk menggeser balok ke kiri  |
-
-## 5. Buzzer, LED, dan feedback
+## 4. Buzzer, LED, dan feedback
 
 | Instruksi     | Parameter             | Fungsi                                                            |
 | ------------- | --------------------- | ----------------------------------------------------------------- |
@@ -62,7 +55,16 @@ String command =
 | `LED_KEDIP`   | `jumlah,interval_ms`  | Membuat LED berkedip                                              |
 | `LAPOR_JARAK` | —                     | Menampilkan pembacaan ultrasonic ke serial                        |
 
-## 9. Timeout, batas gerakan, dan keselamatan
+## 5. Line follower
+
+| Instruksi     | Parameter          | Fungsi                                                                                   |
+| ------------- | ------------------ | ---------------------------------------------------------------------------------------- |
+| `FOLLOW_LINE` | `jumlah_simpangan` | Mengikuti garis hitam sampai jumlah simpangan tertentu (default 1)                       |
+| `MAJU_LINE`   | `max_cm`           | Maju sampai 2 sensor infrared tengah mendeteksi line (tidak kurang/lebih & bukan samping) |
+| `MUNDUR_LINE` | `max_cm`           | Mundur sampai 2 sensor infrared tengah mendeteksi line (tidak kurang/lebih & bukan samping) |
+| `STOP_LINE`   | —                  | Menghentikan line follower                                                               |
+
+## 6. Timeout, batas gerakan, dan keselamatan
 
 | Instruksi        | Parameter | Fungsi                                      |
 | ---------------- | --------- | ------------------------------------------- |
