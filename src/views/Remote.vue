@@ -97,7 +97,7 @@
             class="bg-green-500 text-black font-black uppercase text-base md:text-lg py-3.5 px-6 rounded-xl border-4 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:bg-green-400 active:translate-y-1 active:shadow-none transition-all cursor-pointer flex items-center gap-2"
           >
             <span>🚀</span>
-            <h3>JALANKAN MISI (PROD)</h3>
+            <h3>JALANKAN MISI (CODE)</h3>
           </button>
 
           <button
@@ -256,8 +256,8 @@ async function runProdMission() {
       "String instruksi kosong! Silakan tambahkan instruksi terlebih dahulu.";
     return;
   }
-  const prodCmd = str.toUpperCase().startsWith("PROD") ? str : `PROD;${str}`;
-  await sendRawBle(prodCmd);
+  const codeCmd = str.toUpperCase().startsWith("CODE") ? str : `CODE;${str}`;
+  await sendRawBle(codeCmd);
 }
 
 async function emergencyStop() {

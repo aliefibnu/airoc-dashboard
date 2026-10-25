@@ -30,6 +30,8 @@ enum Opcode {
   OP_FOLLOW_LINE,
   OP_MAJU_LINE,
   OP_MUNDUR_LINE,
+  OP_STOP_LINE,
+  OP_KALIBRASI,
   OP_CONFIG
 };
 
@@ -40,8 +42,8 @@ struct Instruction {
 };
 
 const int MAX_COMMANDS = 64;
-Instruction prodQueue[MAX_COMMANDS];
-int prodCount = 0;
+Instruction commandQueue[MAX_COMMANDS];
+int commandCount = 0;
 
 int currentSpeed = 1000;
 int scanMaxAngle = 90;
@@ -65,9 +67,8 @@ int defaultBeepFreq = 1500;
 int defaultBeepDur = 100;
 int defaultServo = 90;
 int defaultFollowLine = 1;
-bool lineFollowerActive = false;
 
-char rxBuf[300];
+char rxBuf[512];
 int rxLen = 0;
 unsigned long lastRxTime = 0;
 
@@ -85,94 +86,103 @@ void playBunyi(int count);
 void playBeep(int freq, int duration);
 void blinkLed(int count, int intervalMs);
 CRGB parseColor(const char* s);
-bool isEmergencyString(const char* s);
 bool parseInstruction(char* str, Instruction& inst);
 void executeInstruction(const Instruction& inst);
-void processCommandLine(char* line);
+void processCodePacket(char* payload);
 
 void setup() {
   Leanbot.begin();
+  LbIRLine.doManualCalibration(TB1A);
+  while (LbTouch.read(TB1A));
+  delay(200);
+  LbTouch.readBits();
   LbRGB.fillColor(CRGB::Black);
   LbRGB.show();
+  Leanbot.tone(1500, 100);
+  while (Serial.available() > 0) {
+    Serial.read();
+  }
+  rxLen = 0;
+  rxBuf[0] = '\0';
 }
 
 void loop() {
-  if (LbTouch.onPress(TB1A) || LbTouch.onPress(TB2A)) {
-    triggerEmergencyStop();
-  }
+  checkEmergency();
 
   while (Serial.available() > 0) {
     char c = Serial.read();
-    if (c == '\r' || c == '\n') {
-      if (rxLen > 0) {
-        rxBuf[rxLen] = '\0';
-        processCommandLine(rxBuf);
-        rxLen = 0;
-      }
-    } else {
-      if (rxLen < (int)sizeof(rxBuf) - 1) {
-        rxBuf[rxLen++] = c;
-        rxBuf[rxLen] = '\0';
-      }
-      lastRxTime = millis();
+    if (rxLen < (int)sizeof(rxBuf) - 1) {
+      rxBuf[rxLen++] = c;
+      rxBuf[rxLen] = '\0';
     }
+    lastRxTime = millis();
   }
 
-  if (rxLen > 0 && (millis() - lastRxTime > 100)) {
-    rxBuf[rxLen] = '\0';
-    processCommandLine(rxBuf);
-    rxLen = 0;
+  if (rxLen > 0) {
+    char* codePtr = strstr(rxBuf, "CODE;");
+    if (codePtr != NULL) {
+      if (codePtr > rxBuf) {
+        memmove(rxBuf, codePtr, strlen(codePtr) + 1);
+        rxLen = strlen(rxBuf);
+      }
+      char lastChar = rxBuf[rxLen - 1];
+      bool hasNewline = (lastChar == '\n' || lastChar == '\r');
+      bool hasTimeout = (millis() - lastRxTime > 80);
+
+      if (hasNewline || hasTimeout) {
+        while (rxLen > 0 && (rxBuf[rxLen - 1] == '\r' || rxBuf[rxLen - 1] == '\n' || rxBuf[rxLen - 1] == ' ' || rxBuf[rxLen - 1] == '\t')) {
+          rxBuf[--rxLen] = '\0';
+        }
+        processCodePacket(rxBuf + 5);
+        rxLen = 0;
+        rxBuf[0] = '\0';
+      }
+    } else {
+      if (rxLen > 10) {
+        char temp[5];
+        int keep = (rxLen >= 4) ? 4 : rxLen;
+        memcpy(temp, rxBuf + rxLen - keep, keep);
+        temp[keep] = '\0';
+        memcpy(rxBuf, temp, keep + 1);
+        rxLen = keep;
+      }
+      if (millis() - lastRxTime > 200) {
+        rxLen = 0;
+        rxBuf[0] = '\0';
+      }
+    }
   }
 }
 
 void triggerEmergencyStop() {
   emergencyFlag = true;
-  lineFollowerActive = false;
   LbMotion.runLR(0, 0);
   LbMotion.stopAndWait();
   Leanbot.noTone();
   LbRGB.fillColor(CRGB::Red);
   LbRGB.show();
-  prodCount = 0;
+  commandCount = 0;
   Serial.println(F("EMERGENCY_STOP"));
 }
 
-bool isEmergencyString(const char* s) {
-  while (*s == ' ' || *s == '\t') s++;
-  if (strcasecmp(s, "EMERGENCY_STOP") == 0) return true;
-  if (strcasecmp(s, "ESTOP") == 0) return true;
-  if (strcasecmp(s, "STOP") == 0) return true;
-  if (strcasecmp(s, "STP") == 0) return true;
-  if (strcasecmp(s, "!") == 0) return true;
-  if (strstr(s, "EMERGENCY_STOP") != NULL) return true;
-  return false;
-}
-
 void checkEmergency() {
-  if (LbTouch.onPress(TB1A) || LbTouch.onPress(TB2A)) {
+  if (LbTouch.onPress(TB2A) || LbTouch.onPress(TB2B)) {
     triggerEmergencyStop();
     return;
   }
 
   while (Serial.available() > 0) {
     char c = Serial.read();
-    if (c == '\r' || c == '\n') {
-      if (rxLen > 0) {
-        rxBuf[rxLen] = '\0';
-        if (isEmergencyString(rxBuf)) {
-          triggerEmergencyStop();
-        }
-        rxLen = 0;
-      }
-    } else {
-      if (rxLen < (int)sizeof(rxBuf) - 1) {
-        rxBuf[rxLen++] = c;
-        rxBuf[rxLen] = '\0';
-      }
-      if (isEmergencyString(rxBuf)) {
-        triggerEmergencyStop();
-        rxLen = 0;
-      }
+    if (rxLen < (int)sizeof(rxBuf) - 1) {
+      rxBuf[rxLen++] = c;
+      rxBuf[rxLen] = '\0';
+    }
+    lastRxTime = millis();
+    if (strstr(rxBuf, "EMERGENCY_STOP") != NULL || strstr(rxBuf, "STOP") != NULL) {
+      triggerEmergencyStop();
+      rxLen = 0;
+      rxBuf[0] = '\0';
+      return;
     }
   }
 }
@@ -188,48 +198,40 @@ void delayInterruptible(unsigned long ms) {
 
 void moveMm(int mm, int dir) {
   if (emergencyFlag || mm <= 0) return;
-  int spd = currentSpeed;
-  if (spd <= 0) spd = 1000;
+  int spd = currentSpeed > 0 ? currentSpeed : 1000;
   LbMotion.runLR(dir * spd, dir * spd);
-  LbMotion.setZeroOrigin();
-  int step = 2;
-  for (int d = step; d <= mm; d += step) {
-    LbMotion.waitUntilDistanceMm(dir * d);
+  int remaining = mm;
+  while (remaining > 0 && !emergencyFlag) {
+    int step = remaining > 50 ? 50 : remaining;
+    LbMotion.waitDistanceMm(dir * step);
+    remaining -= step;
     checkEmergency();
-    if (emergencyFlag) break;
-  }
-  if (!emergencyFlag && (mm % step != 0)) {
-    LbMotion.waitUntilDistanceMm(dir * mm);
   }
   LbMotion.stopAndWait();
 }
 
 void rotateDeg(int deg, int dir) {
   if (emergencyFlag || deg <= 0) return;
-  int spd = currentSpeed;
-  if (spd <= 0) spd = 1000;
+  int spd = currentSpeed > 0 ? currentSpeed : 1000;
   if (dir > 0) {
     LbMotion.runLR(+spd, -spd);
   } else {
     LbMotion.runLR(-spd, +spd);
   }
-  LbMotion.setZeroOrigin();
-  int step = 2;
-  for (int r = step; r <= deg; r += step) {
-    LbMotion.waitUntilRotationDeg(dir * r);
+  int remaining = deg;
+  while (remaining > 0 && !emergencyFlag) {
+    int step = remaining > 45 ? 45 : remaining;
+    LbMotion.waitRotationDeg(dir * step);
+    remaining -= step;
     checkEmergency();
-    if (emergencyFlag) break;
-  }
-  if (!emergencyFlag && (deg % step != 0)) {
-    LbMotion.waitUntilRotationDeg(dir * deg);
   }
   LbMotion.stopAndWait();
 }
 
 void scanObject(int dir, int maxDistCm, int maxDeg) {
   if (emergencyFlag) return;
-  if (maxDistCm <= 0) maxDistCm = 20;
-  if (maxDeg <= 0) maxDeg = scanMaxAngle;
+  if (maxDistCm <= 0) maxDistCm = defaultScanDist;
+  if (maxDeg <= 0) maxDeg = defaultScanAngle;
 
   int d = Leanbot.pingCm();
   if (d > 0 && d <= maxDistCm) {
@@ -238,23 +240,22 @@ void scanObject(int dir, int maxDistCm, int maxDeg) {
     return;
   }
 
-  int spd = currentSpeed;
-  if (spd <= 0) spd = 600;
-  if (spd > 700) spd = 700;
-
+  int spd = 600;
   if (dir > 0) {
     LbMotion.runLR(+spd, -spd);
   } else {
     LbMotion.runLR(-spd, +spd);
   }
-  LbMotion.setZeroOrigin();
 
-  int step = 2;
+  int step = 3;
   bool found = false;
   int foundDist = 0;
+  int traveledDeg = 0;
 
-  for (int angle = step; angle <= maxDeg; angle += step) {
-    LbMotion.waitUntilRotationDeg(dir * angle);
+  while (traveledDeg < maxDeg && !emergencyFlag) {
+    int curStep = (maxDeg - traveledDeg > step) ? step : (maxDeg - traveledDeg);
+    LbMotion.waitRotationDeg(dir * curStep);
+    traveledDeg += curStep;
     checkEmergency();
     if (emergencyFlag) break;
 
@@ -266,20 +267,7 @@ void scanObject(int dir, int maxDistCm, int maxDeg) {
     }
   }
 
-  if (!emergencyFlag && !found && (maxDeg % step != 0)) {
-    LbMotion.waitUntilRotationDeg(dir * maxDeg);
-    checkEmergency();
-    if (!emergencyFlag) {
-      d = Leanbot.pingCm();
-      if (d > 0 && d <= maxDistCm) {
-        found = true;
-        foundDist = d;
-      }
-    }
-  }
-
   LbMotion.stopAndWait();
-
   if (emergencyFlag) return;
 
   if (found) {
@@ -292,7 +280,7 @@ void scanObject(int dir, int maxDistCm, int maxDeg) {
 
 void approachObject(int targetCm) {
   if (emergencyFlag) return;
-  if (targetCm <= 0) targetCm = 6;
+  if (targetCm <= 0) targetCm = defaultDekati;
 
   int d = Leanbot.pingCm();
   if (d <= 0 || d <= targetCm || d > 80) {
@@ -301,38 +289,32 @@ void approachObject(int targetCm) {
     return;
   }
 
-  int spd = currentSpeed;
-  if (spd <= 0) spd = 600;
-  if (spd > 700) spd = 700;
-
+  int spd = 600;
   LbMotion.runLR(+spd, +spd);
-  LbMotion.setZeroOrigin();
 
-  int stepMm = 5;
-  int currentDistanceTraveled = 0;
+  int stepMm = 10;
+  int traveledMm = 0;
   int maxTravelMm = 800;
   int missCount = 0;
 
-  while (currentDistanceTraveled < maxTravelMm) {
-    currentDistanceTraveled += stepMm;
-    LbMotion.waitUntilDistanceMm(currentDistanceTraveled);
+  while (traveledMm < maxTravelMm && !emergencyFlag) {
+    LbMotion.waitDistanceMm(stepMm);
+    traveledMm += stepMm;
     checkEmergency();
     if (emergencyFlag) break;
 
     d = Leanbot.pingCm();
-
     if (d > 0 && d <= targetCm) {
       break;
     }
-
     if (d <= 0 || d > 80) {
       missCount++;
-      if (missCount >= 3) {
+      if (missCount >= 4) {
         break;
       }
     } else {
       missCount = 0;
-      if (d - targetCm <= 3 && spd > 350) {
+      if (d - targetCm <= 4 && spd > 350) {
         spd = 350;
         LbMotion.runLR(+spd, +spd);
       }
@@ -346,7 +328,7 @@ void approachObject(int targetCm) {
 
 void retreatObject(int targetCm) {
   if (emergencyFlag) return;
-  if (targetCm <= 0) targetCm = 20;
+  if (targetCm <= 0) targetCm = defaultJauhi;
 
   int d = Leanbot.pingCm();
   if (d <= 0 || d >= targetCm || d > 80) {
@@ -355,38 +337,32 @@ void retreatObject(int targetCm) {
     return;
   }
 
-  int spd = currentSpeed;
-  if (spd <= 0) spd = 600;
-  if (spd > 700) spd = 700;
-
+  int spd = 600;
   LbMotion.runLR(-spd, -spd);
-  LbMotion.setZeroOrigin();
 
-  int stepMm = 5;
-  int currentDistanceTraveled = 0;
+  int stepMm = 10;
+  int traveledMm = 0;
   int maxTravelMm = 800;
   int missCount = 0;
 
-  while (currentDistanceTraveled < maxTravelMm) {
-    currentDistanceTraveled += stepMm;
-    LbMotion.waitUntilDistanceMm(-currentDistanceTraveled);
+  while (traveledMm < maxTravelMm && !emergencyFlag) {
+    LbMotion.waitDistanceMm(-stepMm);
+    traveledMm += stepMm;
     checkEmergency();
     if (emergencyFlag) break;
 
     d = Leanbot.pingCm();
-
     if (d >= targetCm && d <= 80) {
       break;
     }
-
     if (d <= 0 || d > 80) {
       missCount++;
-      if (missCount >= 3) {
+      if (missCount >= 4) {
         break;
       }
     } else {
       missCount = 0;
-      if (targetCm - d <= 3 && spd > 350) {
+      if (targetCm - d <= 4 && spd > 350) {
         spd = 350;
         LbMotion.runLR(-spd, -spd);
       }
@@ -400,12 +376,8 @@ void retreatObject(int targetCm) {
 
 void moveToLine(int dir, int maxDistCm) {
   if (emergencyFlag) return;
-  int spd = currentSpeed;
-  if (spd <= 0) spd = 500;
-  if (spd > 600) spd = 600;
-  if (spd < 300) spd = 300;
-
-  int maxMm = (maxDistCm > 0) ? (maxDistCm * 10) : 800;
+  int spd = 500;
+  int maxMm = maxDistCm > 0 ? maxDistCm * 10 : 500;
   int stepMm = 2;
   int traveledMm = 0;
   bool found = false;
@@ -419,16 +391,15 @@ void moveToLine(int dir, int maxDistCm) {
   }
 
   LbMotion.runLR(dir * spd, dir * spd);
-  LbMotion.setZeroOrigin();
 
   while (!emergencyFlag && traveledMm < maxMm) {
+    LbMotion.waitDistanceMm(dir * stepMm);
     traveledMm += stepMm;
-    LbMotion.waitUntilDistanceMm(dir * traveledMm);
     checkEmergency();
     if (emergencyFlag) break;
 
     int line = LbIRLine.read();
-    LbIRLine.displayOnRGB(CRGB::DarkCyan);
+    LbIRLine.displayOnRGB(line, CRGB::Blue);
 
     if ((line & 0b1111) == 0b0110) {
       found = true;
@@ -436,7 +407,6 @@ void moveToLine(int dir, int maxDistCm) {
     }
   }
 
-  LbMotion.runLR(0, 0);
   LbMotion.stopAndWait();
 
   if (!emergencyFlag) {
@@ -455,18 +425,14 @@ void moveToLine(int dir, int maxDistCm) {
 void followLineUntilIntersection(int targetIntersections) {
   if (emergencyFlag) return;
   if (targetIntersections <= 0) {
-    lineFollowerActive = false;
     LbMotion.runLR(0, 0);
     LbMotion.stopAndWait();
     return;
   }
 
-  lineFollowerActive = true;
-
-  int spd = currentSpeed;
-  if (spd <= 0) spd = 800;
+  int spd = currentSpeed > 0 ? currentSpeed : 1000;
+  if (spd < 400) spd = 400;
   if (spd > 1200) spd = 1200;
-  if (spd < 350) spd = 350;
 
   int intersectionsCount = 0;
   unsigned long lastSeenLine = millis();
@@ -474,22 +440,12 @@ void followLineUntilIntersection(int targetIntersections) {
   int initLine = LbIRLine.read();
   if ((initLine == 0b1111) || ((initLine & 0b1001) == 0b1001)) {
     LbMotion.runLR(spd, spd);
-    LbMotion.setZeroOrigin();
-    for (int d = 2; d <= 30; d += 2) {
-      LbMotion.waitUntilDistanceMm(d);
-      checkEmergency();
-      if (emergencyFlag || !lineFollowerActive) {
-        lineFollowerActive = false;
-        LbMotion.runLR(0, 0);
-        LbMotion.stopAndWait();
-        return;
-      }
-    }
+    LbMotion.waitDistanceMm(25);
   }
 
-  while (!emergencyFlag && lineFollowerActive) {
+  while (!emergencyFlag) {
     checkEmergency();
-    if (emergencyFlag || !lineFollowerActive) break;
+    if (emergencyFlag) break;
 
     int lineValue = LbIRLine.read();
     LbIRLine.displayOnRGB(CRGB::DarkCyan);
@@ -501,14 +457,8 @@ void followLineUntilIntersection(int targetIntersections) {
       if (intersectionsCount >= targetIntersections) {
         break;
       }
-
       LbMotion.runLR(spd, spd);
-      LbMotion.setZeroOrigin();
-      for (int d = 2; d <= 30; d += 2) {
-        LbMotion.waitUntilDistanceMm(d);
-        checkEmergency();
-        if (emergencyFlag || !lineFollowerActive) break;
-      }
+      LbMotion.waitDistanceMm(25);
       continue;
     }
 
@@ -539,7 +489,6 @@ void followLineUntilIntersection(int targetIntersections) {
 
       case 0b0000:
         if (millis() - lastSeenLine > 1500) {
-          lineFollowerActive = false;
           LbMotion.runLR(0, 0);
           LbMotion.stopAndWait();
           LbRGB.fillColor(CRGB::Red);
@@ -557,7 +506,6 @@ void followLineUntilIntersection(int targetIntersections) {
     delay(2);
   }
 
-  lineFollowerActive = false;
   LbMotion.runLR(0, 0);
   LbMotion.stopAndWait();
   if (!emergencyFlag) {
@@ -657,24 +605,24 @@ bool parseInstruction(char* str, Instruction& inst) {
   inst.p1 = 0;
   inst.p2 = 0;
 
-  if (strcasecmp(cmd, "MAJU") == 0 || strcasecmp(cmd, "FWD") == 0) {
+  if (strcasecmp(cmd, "MAJU") == 0) {
     inst.opcode = OP_MAJU;
     inst.p1 = defaultMaju;
-  } else if (strcasecmp(cmd, "MUNDUR") == 0 || strcasecmp(cmd, "BWD") == 0) {
+  } else if (strcasecmp(cmd, "MUNDUR") == 0) {
     inst.opcode = OP_MUNDUR;
     inst.p1 = defaultMundur;
-  } else if (strcasecmp(cmd, "KANAN") == 0 || strcasecmp(cmd, "RIGHT") == 0) {
+  } else if (strcasecmp(cmd, "KANAN") == 0) {
     inst.opcode = OP_KANAN;
     inst.p1 = defaultKanan;
-  } else if (strcasecmp(cmd, "KIRI") == 0 || strcasecmp(cmd, "LEFT") == 0) {
+  } else if (strcasecmp(cmd, "KIRI") == 0) {
     inst.opcode = OP_KIRI;
     inst.p1 = defaultKiri;
-  } else if (strcasecmp(cmd, "STOP") == 0 || strcasecmp(cmd, "STP") == 0) {
+  } else if (strcasecmp(cmd, "STOP") == 0) {
     inst.opcode = OP_STOP;
-  } else if (strcasecmp(cmd, "SPEED") == 0 || strcasecmp(cmd, "SPD") == 0) {
+  } else if (strcasecmp(cmd, "SPEED") == 0) {
     inst.opcode = OP_SPEED;
     inst.p1 = defaultSpeed;
-  } else if (strcasecmp(cmd, "TUNGGU") == 0 || strcasecmp(cmd, "DELAY") == 0 || strcasecmp(cmd, "DLY") == 0) {
+  } else if (strcasecmp(cmd, "TUNGGU") == 0) {
     inst.opcode = OP_TUNGGU;
     inst.p1 = defaultTunggu;
   } else if (strcasecmp(cmd, "UKUR_JARAK") == 0) {
@@ -682,11 +630,11 @@ bool parseInstruction(char* str, Instruction& inst) {
   } else if (strcasecmp(cmd, "SCAN_KANAN") == 0) {
     inst.opcode = OP_SCAN_KANAN;
     inst.p1 = defaultScanDist;
-    inst.p2 = scanMaxAngle;
+    inst.p2 = defaultScanAngle;
   } else if (strcasecmp(cmd, "SCAN_KIRI") == 0) {
     inst.opcode = OP_SCAN_KIRI;
     inst.p1 = defaultScanDist;
-    inst.p2 = scanMaxAngle;
+    inst.p2 = defaultScanAngle;
   } else if (strcasecmp(cmd, "DEKATI_OBJEK") == 0) {
     inst.opcode = OP_DEKATI_OBJEK;
     inst.p1 = defaultDekati;
@@ -699,9 +647,9 @@ bool parseInstruction(char* str, Instruction& inst) {
   } else if (strcasecmp(cmd, "BATAS_SCAN") == 0) {
     inst.opcode = OP_BATAS_SCAN;
     inst.p1 = defaultScanAngle;
-  } else if (strcasecmp(cmd, "CAPIT") == 0 || strcasecmp(cmd, "GRIPPER_CLOSE") == 0 || strcasecmp(cmd, "GCL") == 0 || strcasecmp(cmd, "ARM_DOWN") == 0 || strcasecmp(cmd, "ADN") == 0) {
+  } else if (strcasecmp(cmd, "CAPIT") == 0) {
     inst.opcode = OP_CAPIT;
-  } else if (strcasecmp(cmd, "LEPAS") == 0 || strcasecmp(cmd, "GRIPPER_OPEN") == 0 || strcasecmp(cmd, "GOP") == 0 || strcasecmp(cmd, "ARM_UP") == 0 || strcasecmp(cmd, "AUP") == 0) {
+  } else if (strcasecmp(cmd, "LEPAS") == 0) {
     inst.opcode = OP_LEPAS;
   } else if (strcasecmp(cmd, "BUNYI") == 0) {
     inst.opcode = OP_BUNYI;
@@ -723,27 +671,30 @@ bool parseInstruction(char* str, Instruction& inst) {
     inst.p2 = 200;
   } else if (strcasecmp(cmd, "LAPOR_JARAK") == 0) {
     inst.opcode = OP_LAPOR_JARAK;
-  } else if (strcasecmp(cmd, "EMERGENCY_STOP") == 0 || strcasecmp(cmd, "ESTOP") == 0) {
+  } else if (strcasecmp(cmd, "EMERGENCY_STOP") == 0) {
     inst.opcode = OP_EMERGENCY_STOP;
   } else if (strcasecmp(cmd, "END") == 0) {
     inst.opcode = OP_END;
-  } else if (strcasecmp(cmd, "SERVO") == 0 || strcasecmp(cmd, "SRV") == 0) {
+  } else if (strcasecmp(cmd, "SERVO") == 0) {
     inst.opcode = OP_SERVO;
     inst.p1 = defaultServo;
-  } else if (strcasecmp(cmd, "FOLLOW_LINE") == 0 || strcasecmp(cmd, "LINE_FOLLOWER") == 0 || strcasecmp(cmd, "LINE") == 0 || strcasecmp(cmd, "IKUTI_GARIS") == 0) {
+  } else if (strcasecmp(cmd, "FOLLOW_LINE") == 0) {
     inst.opcode = OP_FOLLOW_LINE;
     inst.p1 = defaultFollowLine;
-  } else if (strcasecmp(cmd, "STOP_LINE") == 0) {
-    inst.opcode = OP_FOLLOW_LINE;
-    inst.p1 = 0;
-  } else if (strcasecmp(cmd, "MAJU_LINE") == 0 || strcasecmp(cmd, "MAJU_SAMPAI_LINE") == 0 || strcasecmp(cmd, "FWD_LINE") == 0) {
+  } else if (strcasecmp(cmd, "MAJU_LINE") == 0) {
     inst.opcode = OP_MAJU_LINE;
     inst.p1 = defaultMajuLine;
-  } else if (strcasecmp(cmd, "MUNDUR_LINE") == 0 || strcasecmp(cmd, "MUNDUR_SAMPAI_LINE") == 0 || strcasecmp(cmd, "BWD_LINE") == 0) {
+  } else if (strcasecmp(cmd, "MUNDUR_LINE") == 0) {
     inst.opcode = OP_MUNDUR_LINE;
     inst.p1 = defaultMundurLine;
-  } else if (strcasecmp(cmd, "CONFIG") == 0 || strcasecmp(cmd, "SET_DEFAULT") == 0 || strcasecmp(cmd, "CFG") == 0) {
+  } else if (strcasecmp(cmd, "STOP_LINE") == 0) {
+    inst.opcode = OP_STOP_LINE;
+  } else if (strcasecmp(cmd, "KALIBRASI") == 0 || strcasecmp(cmd, "CALIBRATE") == 0 || strcasecmp(cmd, "CALIBRASI_LINE") == 0) {
+    inst.opcode = OP_KALIBRASI;
+  } else if (strcasecmp(cmd, "CONFIG") == 0) {
     inst.opcode = OP_CONFIG;
+  } else if (strcasecmp(cmd, "PROD") == 0 || strcasecmp(cmd, "CODE") == 0) {
+    return false;
   } else {
     return false;
   }
@@ -800,7 +751,7 @@ bool parseInstruction(char* str, Instruction& inst) {
         else if (strcasecmp(key, "BUNYI") == 0) { inst.p1 = OP_BUNYI; inst.p2 = numVal; }
         else if (strcasecmp(key, "BEEP") == 0) { inst.p1 = OP_BEEP; inst.p2 = numVal; }
         else if (strcasecmp(key, "SERVO") == 0) { inst.p1 = OP_SERVO; inst.p2 = numVal; }
-        else if (strcasecmp(key, "FOLLOW_LINE") == 0 || strcasecmp(key, "LINE_FOLLOWER") == 0 || strcasecmp(key, "LINE") == 0) { inst.p1 = OP_FOLLOW_LINE; inst.p2 = numVal; }
+        else if (strcasecmp(key, "FOLLOW_LINE") == 0 || strcasecmp(key, "LINE_FOLLOWER") == 0) { inst.p1 = OP_FOLLOW_LINE; inst.p2 = numVal; }
         else if (strcasecmp(key, "MAJU_LINE") == 0) { inst.p1 = OP_MAJU_LINE; inst.p2 = numVal; }
         else if (strcasecmp(key, "MUNDUR_LINE") == 0) { inst.p1 = OP_MUNDUR_LINE; inst.p2 = numVal; }
       }
@@ -843,7 +794,7 @@ void executeInstruction(const Instruction& inst) {
       break;
 
     case OP_STOP:
-      lineFollowerActive = false;
+    case OP_STOP_LINE:
       LbMotion.runLR(0, 0);
       LbMotion.stopAndWait();
       break;
@@ -864,7 +815,8 @@ void executeInstruction(const Instruction& inst) {
       delayInterruptible(inst.p1);
       break;
 
-    case OP_UKUR_JARAK: {
+    case OP_UKUR_JARAK:
+    case OP_LAPOR_JARAK: {
       int d = Leanbot.pingCm();
       Serial.print(F("JARAK:"));
       Serial.println(d);
@@ -889,7 +841,7 @@ void executeInstruction(const Instruction& inst) {
 
     case OP_CEK_OBJEK: {
       int d = Leanbot.pingCm();
-      int limit = (inst.p1 > 0) ? inst.p1 : defaultCek;
+      int limit = inst.p1 > 0 ? inst.p1 : defaultCek;
       if (d > 0 && d <= limit) {
         LbRGB.fillColor(CRGB::Green);
         LbRGB.show();
@@ -916,6 +868,11 @@ void executeInstruction(const Instruction& inst) {
 
     case OP_LEPAS:
       LbGripper.open();
+      delayInterruptible(400);
+      break;
+
+    case OP_SERVO:
+      LbGripper.close(inst.p1);
       delayInterruptible(400);
       break;
 
@@ -968,13 +925,6 @@ void executeInstruction(const Instruction& inst) {
       blinkLed(inst.p1, inst.p2);
       break;
 
-    case OP_LAPOR_JARAK: {
-      int d = Leanbot.pingCm();
-      Serial.print(F("JARAK:"));
-      Serial.println(d);
-      break;
-    }
-
     case OP_EMERGENCY_STOP:
       triggerEmergencyStop();
       break;
@@ -984,16 +934,10 @@ void executeInstruction(const Instruction& inst) {
       LbMotion.stopAndWait();
       break;
 
-    case OP_SERVO:
-      LbGripper.close(inst.p1);
-      delayInterruptible(400);
-      break;
-
     case OP_FOLLOW_LINE:
       if (inst.p1 > 0) {
         followLineUntilIntersection(inst.p1);
       } else {
-        lineFollowerActive = false;
         LbMotion.runLR(0, 0);
         LbMotion.stopAndWait();
       }
@@ -1005,6 +949,18 @@ void executeInstruction(const Instruction& inst) {
 
     case OP_MUNDUR_LINE:
       moveToLine(-1, inst.p1);
+      break;
+
+    case OP_KALIBRASI:
+      LbMotion.runLR(0, 0);
+      LbMotion.stopAndWait();
+      LbIRLine.doManualCalibration(TB1A);
+      while (LbTouch.read(TB1A));
+      delay(200);
+      LbTouch.readBits();
+      LbRGB.fillColor(CRGB::Black);
+      LbRGB.show();
+      playBunyi(2);
       break;
 
     case OP_CONFIG: {
@@ -1049,73 +1005,45 @@ void executeInstruction(const Instruction& inst) {
   }
 }
 
-void processCommandLine(char* line) {
-  while (*line == ' ' || *line == '\t') line++;
-  if (*line == '\0') return;
+void processCodePacket(char* payload) {
+  while (*payload == ' ' || *payload == '\t' || *payload == ';') payload++;
+  if (*payload == '\0') return;
 
-  if (isEmergencyString(line)) {
-    triggerEmergencyStop();
-    return;
-  }
+  commandCount = 0;
+  char* p = payload;
 
-  bool isProd = false;
-  if (strncasecmp(line, "PROD", 4) == 0) {
-    char after = line[4];
-    if (after == ';' || after == ':' || after == ' ' || after == '\t' || after == '\0') {
-      isProd = true;
-      line += 4;
-      while (*line == ';' || *line == ':' || *line == ' ' || *line == '\t') line++;
-    }
-  }
+  while (*p != '\0') {
+    while (*p == ' ' || *p == '\t' || *p == ';') p++;
+    if (*p == '\0') break;
 
-  if (isProd) {
-    prodCount = 0;
-    char* p = line;
-    while (*p != '\0') {
-      char* seg = p;
-      while (*p != '\0' && *p != ';') p++;
-      if (*p == ';') {
-        *p = '\0';
-        p++;
-      }
-      Instruction inst;
-      if (parseInstruction(seg, inst)) {
-        if (prodCount < MAX_COMMANDS) {
-          prodQueue[prodCount++] = inst;
-        }
-      }
-      while (*p == ' ' || *p == '\t') p++;
-    }
-
-    if (prodCount > 0) {
-      emergencyFlag = false;
-      LbRGB.fillColor(CRGB::Black);
-      LbRGB.show();
-      Serial.print(F("PROD_START:"));
-      Serial.println(prodCount);
-      for (int i = 0; i < prodCount; i++) {
-        checkEmergency();
-        if (emergencyFlag) break;
-        executeInstruction(prodQueue[i]);
-      }
-      if (!emergencyFlag) {
-        Serial.println(F("PROD_END"));
-      }
-    }
-  } else {
-    char* p = line;
+    char* seg = p;
     while (*p != '\0' && *p != ';') p++;
-    *p = '\0';
+    if (*p == ';') {
+      *p = '\0';
+      p++;
+    }
+
     Instruction inst;
-    if (parseInstruction(line, inst)) {
-      emergencyFlag = false;
-      LbRGB.fillColor(CRGB::Black);
-      LbRGB.show();
-      Serial.println(F("TEST_START"));
-      executeInstruction(inst);
-      if (!emergencyFlag) {
-        Serial.println(F("TEST_END"));
+    if (parseInstruction(seg, inst)) {
+      if (commandCount < MAX_COMMANDS) {
+        commandQueue[commandCount++] = inst;
       }
+    }
+  }
+
+  if (commandCount > 0) {
+    emergencyFlag = false;
+    LbRGB.fillColor(CRGB::Black);
+    LbRGB.show();
+    Serial.print(F("CODE_START:"));
+    Serial.println(commandCount);
+    for (int i = 0; i < commandCount; i++) {
+      checkEmergency();
+      if (emergencyFlag) break;
+      executeInstruction(commandQueue[i]);
+    }
+    if (!emergencyFlag) {
+      Serial.println(F("CODE_END"));
     }
   }
 }

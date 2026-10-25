@@ -503,6 +503,16 @@ export const INSTRUCTION_ALIASES = [
     color: "neutral",
     params: [],
   },
+  {
+    name: "KALIBRASI",
+    alias: "KALIBRASI",
+    label: "KALIBRASI LINE",
+    description: "Kalibrasi Manual Sensor Garis TB1A",
+    category: "6. LINE FOLLOWER",
+    categoryId: "linefollower",
+    color: "amber",
+    params: [],
+  },
 ];
 
 export default INSTRUCTION_ALIASES;

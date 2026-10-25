@@ -138,7 +138,7 @@ class InstructionDefaultsService {
       `CONFIG:MUNDUR_LINE,${mundurLineVal}`,
     ];
 
-    return `PROD;${parts.join(";")}`;
+    return `CODE;${parts.join(";")}`;
   }
 
   async syncToLeanbot() {
