@@ -1,4 +1,5 @@
 #include <Leanbot.h>
+#include <avr/pgmspace.h>
 
 enum Opcode {
   OP_NONE = 0,
@@ -37,39 +38,39 @@ enum Opcode {
 
 struct Instruction {
   uint8_t opcode;
-  long p1;
-  long p2;
+  int16_t p1;
+  int16_t p2;
 };
 
-const int MAX_COMMANDS = 64;
+const uint8_t MAX_COMMANDS = 24;
 Instruction commandQueue[MAX_COMMANDS];
-int commandCount = 0;
+uint8_t commandCount = 0;
 
-int currentSpeed = 1000;
-int scanMaxAngle = 90;
+int16_t currentSpeed = 1000;
+int16_t scanMaxAngle = 90;
 volatile bool emergencyFlag = false;
 
-int defaultMaju = 10;
-int defaultMundur = 10;
-int defaultKanan = 90;
-int defaultKiri = 90;
-int defaultSpeed = 5;
-int defaultTunggu = 1000;
-int defaultScanDist = 20;
-int defaultScanAngle = 90;
-int defaultDekati = 6;
-int defaultJauhi = 20;
-int defaultCek = 20;
-int defaultMajuLine = 50;
-int defaultMundurLine = 50;
-int defaultBunyi = 1;
-int defaultBeepFreq = 1500;
-int defaultBeepDur = 100;
-int defaultServo = 90;
-int defaultFollowLine = 1;
+int16_t defaultMaju = 10;
+int16_t defaultMundur = 10;
+int16_t defaultKanan = 90;
+int16_t defaultKiri = 90;
+int16_t defaultSpeed = 5;
+int16_t defaultTunggu = 1000;
+int16_t defaultScanDist = 20;
+int16_t defaultScanAngle = 90;
+int16_t defaultDekati = 6;
+int16_t defaultJauhi = 20;
+int16_t defaultCek = 20;
+int16_t defaultMajuLine = 50;
+int16_t defaultMundurLine = 50;
+int16_t defaultBunyi = 1;
+int16_t defaultBeepFreq = 1500;
+int16_t defaultBeepDur = 100;
+int16_t defaultServo = 90;
+int16_t defaultFollowLine = 1;
 
-char rxBuf[512];
-int rxLen = 0;
+char rxBuf[160];
+uint8_t rxLen = 0;
 unsigned long lastRxTime = 0;
 
 void triggerEmergencyStop();
@@ -85,7 +86,8 @@ void followLineUntilIntersection(int targetIntersections);
 void playBunyi(int count);
 void playBeep(int freq, int duration);
 void blinkLed(int count, int intervalMs);
-CRGB parseColor(const char* s);
+uint8_t parseColorIndex(const char* s);
+CRGB getColorFromIndex(uint8_t idx);
 bool parseInstruction(char* str, Instruction& inst);
 void executeInstruction(const Instruction& inst);
 void processCodePacket(char* payload);
@@ -111,7 +113,7 @@ void loop() {
 
   while (Serial.available() > 0) {
     char c = Serial.read();
-    if (rxLen < (int)sizeof(rxBuf) - 1) {
+    if (rxLen < sizeof(rxBuf) - 1) {
       rxBuf[rxLen++] = c;
       rxBuf[rxLen] = '\0';
     }
@@ -119,7 +121,7 @@ void loop() {
   }
 
   if (rxLen > 0) {
-    char* codePtr = strstr(rxBuf, "CODE;");
+    char* codePtr = strstr_P(rxBuf, PSTR("CODE;"));
     if (codePtr != NULL) {
       if (codePtr > rxBuf) {
         memmove(rxBuf, codePtr, strlen(codePtr) + 1);
@@ -140,7 +142,7 @@ void loop() {
     } else {
       if (rxLen > 10) {
         char temp[5];
-        int keep = (rxLen >= 4) ? 4 : rxLen;
+        uint8_t keep = (rxLen >= 4) ? 4 : rxLen;
         memcpy(temp, rxBuf + rxLen - keep, keep);
         temp[keep] = '\0';
         memcpy(rxBuf, temp, keep + 1);
@@ -173,12 +175,12 @@ void checkEmergency() {
 
   while (Serial.available() > 0) {
     char c = Serial.read();
-    if (rxLen < (int)sizeof(rxBuf) - 1) {
+    if (rxLen < sizeof(rxBuf) - 1) {
       rxBuf[rxLen++] = c;
       rxBuf[rxLen] = '\0';
     }
     lastRxTime = millis();
-    if (strstr(rxBuf, "EMERGENCY_STOP") != NULL || strstr(rxBuf, "STOP") != NULL) {
+    if (strstr_P(rxBuf, PSTR("EMERGENCY_STOP")) != NULL || strstr_P(rxBuf, PSTR("STOP")) != NULL) {
       triggerEmergencyStop();
       rxLen = 0;
       rxBuf[0] = '\0';
@@ -549,31 +551,37 @@ void blinkLed(int count, int intervalMs) {
   }
 }
 
-CRGB parseColor(const char* s) {
-  if (strcasecmp(s, "RED") == 0 || strcasecmp(s, "MERAH") == 0) return CRGB::Red;
-  if (strcasecmp(s, "GREEN") == 0 || strcasecmp(s, "HIJAU") == 0) return CRGB::Green;
-  if (strcasecmp(s, "BLUE") == 0 || strcasecmp(s, "BIRU") == 0) return CRGB::Blue;
-  if (strcasecmp(s, "WHITE") == 0 || strcasecmp(s, "PUTIH") == 0) return CRGB::White;
-  if (strcasecmp(s, "YELLOW") == 0 || strcasecmp(s, "KUNING") == 0) return CRGB::Yellow;
-  if (strcasecmp(s, "ORANGE") == 0 || strcasecmp(s, "JINGGA") == 0) return CRGB::Orange;
-  if (strcasecmp(s, "PURPLE") == 0 || strcasecmp(s, "UNGU") == 0) return CRGB::Purple;
-  if (strcasecmp(s, "CYAN") == 0) return CRGB::Cyan;
-  if (strcasecmp(s, "MAGENTA") == 0) return CRGB::Magenta;
-  if (strcasecmp(s, "BLACK") == 0 || strcasecmp(s, "HITAM") == 0 || strcasecmp(s, "OFF") == 0) return CRGB::Black;
+uint8_t parseColorIndex(const char* s) {
+  if (strcasecmp_P(s, PSTR("RED")) == 0 || strcasecmp_P(s, PSTR("MERAH")) == 0) return 1;
+  if (strcasecmp_P(s, PSTR("GREEN")) == 0 || strcasecmp_P(s, PSTR("HIJAU")) == 0) return 2;
+  if (strcasecmp_P(s, PSTR("BLUE")) == 0 || strcasecmp_P(s, PSTR("BIRU")) == 0) return 3;
+  if (strcasecmp_P(s, PSTR("YELLOW")) == 0 || strcasecmp_P(s, PSTR("KUNING")) == 0) return 4;
+  if (strcasecmp_P(s, PSTR("CYAN")) == 0) return 5;
+  if (strcasecmp_P(s, PSTR("MAGENTA")) == 0) return 6;
+  if (strcasecmp_P(s, PSTR("WHITE")) == 0 || strcasecmp_P(s, PSTR("PUTIH")) == 0) return 7;
+  if (strcasecmp_P(s, PSTR("ORANGE")) == 0 || strcasecmp_P(s, PSTR("JINGGA")) == 0) return 8;
+  if (strcasecmp_P(s, PSTR("PURPLE")) == 0 || strcasecmp_P(s, PSTR("UNGU")) == 0) return 9;
+  if (strcasecmp_P(s, PSTR("BLACK")) == 0 || strcasecmp_P(s, PSTR("HITAM")) == 0 || strcasecmp_P(s, PSTR("OFF")) == 0) return 0;
   if (isdigit(s[0])) {
-    int idx = atoi(s);
-    switch (idx) {
-      case 0: return CRGB::Black;
-      case 1: return CRGB::Red;
-      case 2: return CRGB::Green;
-      case 3: return CRGB::Blue;
-      case 4: return CRGB::Yellow;
-      case 5: return CRGB::Cyan;
-      case 6: return CRGB::Magenta;
-      default: return CRGB::White;
-    }
+    return (uint8_t)atoi(s);
   }
-  return CRGB::White;
+  return 7;
+}
+
+CRGB getColorFromIndex(uint8_t idx) {
+  switch (idx) {
+    case 0: return CRGB::Black;
+    case 1: return CRGB::Red;
+    case 2: return CRGB::Green;
+    case 3: return CRGB::Blue;
+    case 4: return CRGB::Yellow;
+    case 5: return CRGB::Cyan;
+    case 6: return CRGB::Magenta;
+    case 7: return CRGB::White;
+    case 8: return CRGB::Orange;
+    case 9: return CRGB::Purple;
+    default: return CRGB::White;
+  }
 }
 
 bool parseInstruction(char* str, Instruction& inst) {
@@ -605,95 +613,94 @@ bool parseInstruction(char* str, Instruction& inst) {
   inst.p1 = 0;
   inst.p2 = 0;
 
-  if (strcasecmp(cmd, "MAJU") == 0) {
+  if (strcasecmp_P(cmd, PSTR("MAJU")) == 0) {
     inst.opcode = OP_MAJU;
     inst.p1 = defaultMaju;
-  } else if (strcasecmp(cmd, "MUNDUR") == 0) {
+  } else if (strcasecmp_P(cmd, PSTR("MUNDUR")) == 0) {
     inst.opcode = OP_MUNDUR;
     inst.p1 = defaultMundur;
-  } else if (strcasecmp(cmd, "KANAN") == 0) {
+  } else if (strcasecmp_P(cmd, PSTR("KANAN")) == 0) {
     inst.opcode = OP_KANAN;
     inst.p1 = defaultKanan;
-  } else if (strcasecmp(cmd, "KIRI") == 0) {
+  } else if (strcasecmp_P(cmd, PSTR("KIRI")) == 0) {
     inst.opcode = OP_KIRI;
     inst.p1 = defaultKiri;
-  } else if (strcasecmp(cmd, "STOP") == 0) {
+  } else if (strcasecmp_P(cmd, PSTR("STOP")) == 0) {
     inst.opcode = OP_STOP;
-  } else if (strcasecmp(cmd, "SPEED") == 0) {
+  } else if (strcasecmp_P(cmd, PSTR("SPEED")) == 0) {
     inst.opcode = OP_SPEED;
     inst.p1 = defaultSpeed;
-  } else if (strcasecmp(cmd, "TUNGGU") == 0) {
+  } else if (strcasecmp_P(cmd, PSTR("TUNGGU")) == 0) {
     inst.opcode = OP_TUNGGU;
     inst.p1 = defaultTunggu;
-  } else if (strcasecmp(cmd, "UKUR_JARAK") == 0) {
+  } else if (strcasecmp_P(cmd, PSTR("UKUR_JARAK")) == 0) {
     inst.opcode = OP_UKUR_JARAK;
-  } else if (strcasecmp(cmd, "SCAN_KANAN") == 0) {
+  } else if (strcasecmp_P(cmd, PSTR("SCAN_KANAN")) == 0) {
     inst.opcode = OP_SCAN_KANAN;
     inst.p1 = defaultScanDist;
     inst.p2 = defaultScanAngle;
-  } else if (strcasecmp(cmd, "SCAN_KIRI") == 0) {
+  } else if (strcasecmp_P(cmd, PSTR("SCAN_KIRI")) == 0) {
     inst.opcode = OP_SCAN_KIRI;
     inst.p1 = defaultScanDist;
     inst.p2 = defaultScanAngle;
-  } else if (strcasecmp(cmd, "DEKATI_OBJEK") == 0) {
+  } else if (strcasecmp_P(cmd, PSTR("DEKATI_OBJEK")) == 0) {
     inst.opcode = OP_DEKATI_OBJEK;
     inst.p1 = defaultDekati;
-  } else if (strcasecmp(cmd, "JAUHI_OBJEK") == 0) {
+  } else if (strcasecmp_P(cmd, PSTR("JAUHI_OBJEK")) == 0) {
     inst.opcode = OP_JAUHI_OBJEK;
     inst.p1 = defaultJauhi;
-  } else if (strcasecmp(cmd, "CEK_OBJEK") == 0) {
+  } else if (strcasecmp_P(cmd, PSTR("CEK_OBJEK")) == 0) {
     inst.opcode = OP_CEK_OBJEK;
     inst.p1 = defaultCek;
-  } else if (strcasecmp(cmd, "BATAS_SCAN") == 0) {
+  } else if (strcasecmp_P(cmd, PSTR("BATAS_SCAN")) == 0) {
     inst.opcode = OP_BATAS_SCAN;
     inst.p1 = defaultScanAngle;
-  } else if (strcasecmp(cmd, "CAPIT") == 0) {
+  } else if (strcasecmp_P(cmd, PSTR("CAPIT")) == 0) {
     inst.opcode = OP_CAPIT;
-  } else if (strcasecmp(cmd, "LEPAS") == 0) {
+  } else if (strcasecmp_P(cmd, PSTR("LEPAS")) == 0) {
     inst.opcode = OP_LEPAS;
-  } else if (strcasecmp(cmd, "BUNYI") == 0) {
+  } else if (strcasecmp_P(cmd, PSTR("BUNYI")) == 0) {
     inst.opcode = OP_BUNYI;
     inst.p1 = defaultBunyi;
-  } else if (strcasecmp(cmd, "BEEP") == 0) {
+  } else if (strcasecmp_P(cmd, PSTR("BEEP")) == 0) {
     inst.opcode = OP_BEEP;
     inst.p1 = defaultBeepFreq;
     inst.p2 = defaultBeepDur;
-  } else if (strcasecmp(cmd, "LED") == 0) {
+  } else if (strcasecmp_P(cmd, PSTR("LED")) == 0) {
     inst.opcode = OP_LED;
     inst.p1 = 1;
-  } else if (strcasecmp(cmd, "LED_WARNA") == 0) {
+  } else if (strcasecmp_P(cmd, PSTR("LED_WARNA")) == 0) {
     inst.opcode = OP_LED_WARNA;
-    CRGB defC = CRGB::White;
-    inst.p1 = ((uint32_t)defC.r << 16) | ((uint32_t)defC.g << 8) | (uint32_t)defC.b;
-  } else if (strcasecmp(cmd, "LED_KEDIP") == 0) {
+    inst.p1 = 7;
+  } else if (strcasecmp_P(cmd, PSTR("LED_KEDIP")) == 0) {
     inst.opcode = OP_LED_KEDIP;
     inst.p1 = 3;
     inst.p2 = 200;
-  } else if (strcasecmp(cmd, "LAPOR_JARAK") == 0) {
+  } else if (strcasecmp_P(cmd, PSTR("LAPOR_JARAK")) == 0) {
     inst.opcode = OP_LAPOR_JARAK;
-  } else if (strcasecmp(cmd, "EMERGENCY_STOP") == 0) {
+  } else if (strcasecmp_P(cmd, PSTR("EMERGENCY_STOP")) == 0) {
     inst.opcode = OP_EMERGENCY_STOP;
-  } else if (strcasecmp(cmd, "END") == 0) {
+  } else if (strcasecmp_P(cmd, PSTR("END")) == 0) {
     inst.opcode = OP_END;
-  } else if (strcasecmp(cmd, "SERVO") == 0) {
+  } else if (strcasecmp_P(cmd, PSTR("SERVO")) == 0) {
     inst.opcode = OP_SERVO;
     inst.p1 = defaultServo;
-  } else if (strcasecmp(cmd, "FOLLOW_LINE") == 0) {
+  } else if (strcasecmp_P(cmd, PSTR("FOLLOW_LINE")) == 0) {
     inst.opcode = OP_FOLLOW_LINE;
     inst.p1 = defaultFollowLine;
-  } else if (strcasecmp(cmd, "MAJU_LINE") == 0) {
+  } else if (strcasecmp_P(cmd, PSTR("MAJU_LINE")) == 0) {
     inst.opcode = OP_MAJU_LINE;
     inst.p1 = defaultMajuLine;
-  } else if (strcasecmp(cmd, "MUNDUR_LINE") == 0) {
+  } else if (strcasecmp_P(cmd, PSTR("MUNDUR_LINE")) == 0) {
     inst.opcode = OP_MUNDUR_LINE;
     inst.p1 = defaultMundurLine;
-  } else if (strcasecmp(cmd, "STOP_LINE") == 0) {
+  } else if (strcasecmp_P(cmd, PSTR("STOP_LINE")) == 0) {
     inst.opcode = OP_STOP_LINE;
-  } else if (strcasecmp(cmd, "KALIBRASI") == 0 || strcasecmp(cmd, "CALIBRATE") == 0 || strcasecmp(cmd, "CALIBRASI_LINE") == 0) {
+  } else if (strcasecmp_P(cmd, PSTR("KALIBRASI")) == 0 || strcasecmp_P(cmd, PSTR("CALIBRATE")) == 0 || strcasecmp_P(cmd, PSTR("CALIBRASI_LINE")) == 0) {
     inst.opcode = OP_KALIBRASI;
-  } else if (strcasecmp(cmd, "CONFIG") == 0) {
+  } else if (strcasecmp_P(cmd, PSTR("CONFIG")) == 0) {
     inst.opcode = OP_CONFIG;
-  } else if (strcasecmp(cmd, "PROD") == 0 || strcasecmp(cmd, "CODE") == 0) {
+  } else if (strcasecmp_P(cmd, PSTR("PROD")) == 0 || strcasecmp_P(cmd, PSTR("CODE")) == 0) {
     return false;
   } else {
     return false;
@@ -701,33 +708,31 @@ bool parseInstruction(char* str, Instruction& inst) {
 
   if (params != NULL && strlen(params) > 0) {
     if (inst.opcode == OP_LED) {
-      if (strcasecmp(params, "ON") == 0 || strcmp(params, "1") == 0) {
+      if (strcasecmp_P(params, PSTR("ON")) == 0 || strcmp_P(params, PSTR("1")) == 0) {
         inst.p1 = 1;
-      } else if (strcasecmp(params, "OFF") == 0 || strcmp(params, "0") == 0 || strcasecmp(params, "CLEAR") == 0) {
+      } else if (strcasecmp_P(params, PSTR("OFF")) == 0 || strcmp_P(params, PSTR("0")) == 0 || strcasecmp_P(params, PSTR("CLEAR")) == 0) {
         inst.p1 = 0;
-      } else if (strcasecmp(params, "SMILE") == 0 || strcasecmp(params, "SMILEY") == 0) {
+      } else if (strcasecmp_P(params, PSTR("SMILE")) == 0 || strcasecmp_P(params, PSTR("SMILEY")) == 0) {
         inst.p1 = 2;
-      } else if (strcasecmp(params, "FROWN") == 0 || strcasecmp(params, "FROWNING") == 0) {
+      } else if (strcasecmp_P(params, PSTR("FROWN")) == 0 || strcasecmp_P(params, PSTR("FROWNING")) == 0) {
         inst.p1 = 3;
-      } else if (strcasecmp(params, "LEFT") == 0 || strcasecmp(params, "KIRI") == 0) {
+      } else if (strcasecmp_P(params, PSTR("LEFT")) == 0 || strcasecmp_P(params, PSTR("KIRI")) == 0) {
         inst.p1 = 4;
-      } else if (strcasecmp(params, "RIGHT") == 0 || strcasecmp(params, "KANAN") == 0) {
+      } else if (strcasecmp_P(params, PSTR("RIGHT")) == 0 || strcasecmp_P(params, PSTR("KANAN")) == 0) {
         inst.p1 = 5;
       } else {
-        CRGB c = parseColor(params);
         inst.p1 = 10;
-        inst.p2 = ((uint32_t)c.r << 16) | ((uint32_t)c.g << 8) | (uint32_t)c.b;
+        inst.p2 = parseColorIndex(params);
       }
     } else if (inst.opcode == OP_LED_WARNA) {
-      CRGB c = parseColor(params);
-      inst.p1 = ((uint32_t)c.r << 16) | ((uint32_t)c.g << 8) | (uint32_t)c.b;
+      inst.p1 = parseColorIndex(params);
     } else if (inst.opcode == OP_FOLLOW_LINE) {
-      if (strcasecmp(params, "OFF") == 0 || strcmp(params, "0") == 0) {
+      if (strcasecmp_P(params, PSTR("OFF")) == 0 || strcmp_P(params, PSTR("0")) == 0) {
         inst.p1 = 0;
-      } else if (strcasecmp(params, "ON") == 0) {
+      } else if (strcasecmp_P(params, PSTR("ON")) == 0) {
         inst.p1 = 9999;
       } else {
-        inst.p1 = atol(params);
+        inst.p1 = atoi(params);
       }
     } else if (inst.opcode == OP_CONFIG) {
       char* comma = strchr(params, ',');
@@ -736,24 +741,24 @@ bool parseInstruction(char* str, Instruction& inst) {
         char* key = params;
         char* val = comma + 1;
         while (*val == ' ' || *val == '\t') val++;
-        long numVal = atol(val);
-        if (strcasecmp(key, "MAJU") == 0) { inst.p1 = OP_MAJU; inst.p2 = numVal; }
-        else if (strcasecmp(key, "MUNDUR") == 0) { inst.p1 = OP_MUNDUR; inst.p2 = numVal; }
-        else if (strcasecmp(key, "KANAN") == 0) { inst.p1 = OP_KANAN; inst.p2 = numVal; }
-        else if (strcasecmp(key, "KIRI") == 0) { inst.p1 = OP_KIRI; inst.p2 = numVal; }
-        else if (strcasecmp(key, "SPEED") == 0) { inst.p1 = OP_SPEED; inst.p2 = numVal; }
-        else if (strcasecmp(key, "TUNGGU") == 0) { inst.p1 = OP_TUNGGU; inst.p2 = numVal; }
-        else if (strcasecmp(key, "BATAS_SCAN") == 0 || strcasecmp(key, "SCAN_SUDUT") == 0) { inst.p1 = OP_BATAS_SCAN; inst.p2 = numVal; }
-        else if (strcasecmp(key, "SCAN_JARAK") == 0 || strcasecmp(key, "SCAN") == 0) { inst.p1 = OP_SCAN_KANAN; inst.p2 = numVal; }
-        else if (strcasecmp(key, "DEKATI") == 0 || strcasecmp(key, "DEKATI_OBJEK") == 0) { inst.p1 = OP_DEKATI_OBJEK; inst.p2 = numVal; }
-        else if (strcasecmp(key, "JAUHI") == 0 || strcasecmp(key, "JAUHI_OBJEK") == 0) { inst.p1 = OP_JAUHI_OBJEK; inst.p2 = numVal; }
-        else if (strcasecmp(key, "CEK") == 0 || strcasecmp(key, "CEK_OBJEK") == 0) { inst.p1 = OP_CEK_OBJEK; inst.p2 = numVal; }
-        else if (strcasecmp(key, "BUNYI") == 0) { inst.p1 = OP_BUNYI; inst.p2 = numVal; }
-        else if (strcasecmp(key, "BEEP") == 0) { inst.p1 = OP_BEEP; inst.p2 = numVal; }
-        else if (strcasecmp(key, "SERVO") == 0) { inst.p1 = OP_SERVO; inst.p2 = numVal; }
-        else if (strcasecmp(key, "FOLLOW_LINE") == 0 || strcasecmp(key, "LINE_FOLLOWER") == 0) { inst.p1 = OP_FOLLOW_LINE; inst.p2 = numVal; }
-        else if (strcasecmp(key, "MAJU_LINE") == 0) { inst.p1 = OP_MAJU_LINE; inst.p2 = numVal; }
-        else if (strcasecmp(key, "MUNDUR_LINE") == 0) { inst.p1 = OP_MUNDUR_LINE; inst.p2 = numVal; }
+        int16_t numVal = atoi(val);
+        if (strcasecmp_P(key, PSTR("MAJU")) == 0) { inst.p1 = OP_MAJU; inst.p2 = numVal; }
+        else if (strcasecmp_P(key, PSTR("MUNDUR")) == 0) { inst.p1 = OP_MUNDUR; inst.p2 = numVal; }
+        else if (strcasecmp_P(key, PSTR("KANAN")) == 0) { inst.p1 = OP_KANAN; inst.p2 = numVal; }
+        else if (strcasecmp_P(key, PSTR("KIRI")) == 0) { inst.p1 = OP_KIRI; inst.p2 = numVal; }
+        else if (strcasecmp_P(key, PSTR("SPEED")) == 0) { inst.p1 = OP_SPEED; inst.p2 = numVal; }
+        else if (strcasecmp_P(key, PSTR("TUNGGU")) == 0) { inst.p1 = OP_TUNGGU; inst.p2 = numVal; }
+        else if (strcasecmp_P(key, PSTR("BATAS_SCAN")) == 0 || strcasecmp_P(key, PSTR("SCAN_SUDUT")) == 0) { inst.p1 = OP_BATAS_SCAN; inst.p2 = numVal; }
+        else if (strcasecmp_P(key, PSTR("SCAN_JARAK")) == 0 || strcasecmp_P(key, PSTR("SCAN")) == 0) { inst.p1 = OP_SCAN_KANAN; inst.p2 = numVal; }
+        else if (strcasecmp_P(key, PSTR("DEKATI")) == 0 || strcasecmp_P(key, PSTR("DEKATI_OBJEK")) == 0) { inst.p1 = OP_DEKATI_OBJEK; inst.p2 = numVal; }
+        else if (strcasecmp_P(key, PSTR("JAUHI")) == 0 || strcasecmp_P(key, PSTR("JAUHI_OBJEK")) == 0) { inst.p1 = OP_JAUHI_OBJEK; inst.p2 = numVal; }
+        else if (strcasecmp_P(key, PSTR("CEK")) == 0 || strcasecmp_P(key, PSTR("CEK_OBJEK")) == 0) { inst.p1 = OP_CEK_OBJEK; inst.p2 = numVal; }
+        else if (strcasecmp_P(key, PSTR("BUNYI")) == 0) { inst.p1 = OP_BUNYI; inst.p2 = numVal; }
+        else if (strcasecmp_P(key, PSTR("BEEP")) == 0) { inst.p1 = OP_BEEP; inst.p2 = numVal; }
+        else if (strcasecmp_P(key, PSTR("SERVO")) == 0) { inst.p1 = OP_SERVO; inst.p2 = numVal; }
+        else if (strcasecmp_P(key, PSTR("FOLLOW_LINE")) == 0 || strcasecmp_P(key, PSTR("LINE_FOLLOWER")) == 0) { inst.p1 = OP_FOLLOW_LINE; inst.p2 = numVal; }
+        else if (strcasecmp_P(key, PSTR("MAJU_LINE")) == 0) { inst.p1 = OP_MAJU_LINE; inst.p2 = numVal; }
+        else if (strcasecmp_P(key, PSTR("MUNDUR_LINE")) == 0) { inst.p1 = OP_MUNDUR_LINE; inst.p2 = numVal; }
       }
     } else {
       char* comma = strchr(params, ',');
@@ -762,10 +767,10 @@ bool parseInstruction(char* str, Instruction& inst) {
         char* p1Str = params;
         char* p2Str = comma + 1;
         while (*p2Str == ' ' || *p2Str == '\t') p2Str++;
-        inst.p1 = atol(p1Str);
-        inst.p2 = atol(p2Str);
+        inst.p1 = atoi(p1Str);
+        inst.p2 = atoi(p2Str);
       } else {
-        inst.p1 = atol(params);
+        inst.p1 = atoi(params);
       }
     }
   }
@@ -908,18 +913,15 @@ void executeInstruction(const Instruction& inst) {
         LbRGB.fillColor(CRGB::Green, BITMAP(ledD, ledO, ledF, ledA, ledB));
         LbRGB.show();
       } else if (inst.p1 == 10) {
-        CRGB c = CRGB((inst.p2 >> 16) & 0xFF, (inst.p2 >> 8) & 0xFF, inst.p2 & 0xFF);
-        LbRGB.fillColor(c);
+        LbRGB.fillColor(getColorFromIndex(inst.p2));
         LbRGB.show();
       }
       break;
 
-    case OP_LED_WARNA: {
-      CRGB c = CRGB((inst.p1 >> 16) & 0xFF, (inst.p1 >> 8) & 0xFF, inst.p1 & 0xFF);
-      LbRGB.fillColor(c);
+    case OP_LED_WARNA:
+      LbRGB.fillColor(getColorFromIndex(inst.p1));
       LbRGB.show();
       break;
-    }
 
     case OP_LED_KEDIP:
       blinkLed(inst.p1, inst.p2);
@@ -964,7 +966,7 @@ void executeInstruction(const Instruction& inst) {
       break;
 
     case OP_CONFIG: {
-      long val = inst.p2;
+      int16_t val = inst.p2;
       switch (inst.p1) {
         case OP_MAJU: if (val > 0) defaultMaju = val; break;
         case OP_MUNDUR: if (val > 0) defaultMundur = val; break;
@@ -1037,7 +1039,7 @@ void processCodePacket(char* payload) {
     LbRGB.show();
     Serial.print(F("CODE_START:"));
     Serial.println(commandCount);
-    for (int i = 0; i < commandCount; i++) {
+    for (uint8_t i = 0; i < commandCount; i++) {
       checkEmergency();
       if (emergencyFlag) break;
       executeInstruction(commandQueue[i]);
