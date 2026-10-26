@@ -529,16 +529,6 @@ export const INSTRUCTION_ALIASES = [
     params: [],
   },
   {
-    name: "END",
-    alias: "END",
-    label: "END EKSEKUSI",
-    description: "Akhiri Eksekusi",
-    category: "5. KESELAMATAN & AKHIR EKSEKUSI",
-    categoryId: "keselamatan",
-    color: "neutral",
-    params: [],
-  },
-  {
     name: "FOLLOW_LINE",
     alias: "FOLLOW_LINE",
     label: "FOLLOW LINE",
