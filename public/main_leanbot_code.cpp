@@ -71,6 +71,13 @@ enum ConfigParam : uint8_t {
   CFG_MUNDUR_LINE_SPEED
 };
 
+enum RobotState : uint8_t {
+  STATE_READY = 0,
+  STATE_RECEIVING,
+  STATE_EXECUTING,
+  STATE_EMERGENCY
+};
+
 struct Instruction {
   uint8_t opcode;
   int16_t p1;
@@ -83,6 +90,7 @@ uint8_t commandCount = 0;
 
 int16_t currentSpeed = 1000;
 volatile bool emergencyFlag = false;
+RobotState currentRobotState = STATE_READY;
 
 int16_t defaultMaju = 10;
 int16_t defaultMajuSpeed = 5;
@@ -126,6 +134,10 @@ unsigned long lastRxTime = 0;
 int freeRam();
 int16_t toMotorSpeed(int16_t spd);
 bool isLineDetected(int line);
+void updateRobotState(RobotState newState);
+void printConfigParamName(uint8_t cfg);
+void printInstructionInfo(const Instruction& inst);
+bool enqueueToken();
 void triggerEmergencyStop();
 bool checkEmergency();
 void delayInterruptible(unsigned long ms);
@@ -167,6 +179,281 @@ bool isLineDetected(int line) {
   return count >= 3;
 }
 
+void updateRobotState(RobotState newState) {
+  if (currentRobotState == newState) return;
+  currentRobotState = newState;
+  Serial.print(F("[STATE] "));
+  switch (currentRobotState) {
+    case STATE_READY:
+      Serial.println(F("READY"));
+      break;
+    case STATE_RECEIVING:
+      Serial.println(F("RECEIVING"));
+      break;
+    case STATE_EXECUTING:
+      Serial.println(F("EXECUTING"));
+      break;
+    case STATE_EMERGENCY:
+      Serial.println(F("EMERGENCY"));
+      break;
+  }
+}
+
+void printConfigParamName(uint8_t cfg) {
+  switch (cfg) {
+    case CFG_MAJU: Serial.print(F("MAJU")); break;
+    case CFG_MAJU_SPEED: Serial.print(F("MAJU_SPEED")); break;
+    case CFG_MUNDUR: Serial.print(F("MUNDUR")); break;
+    case CFG_MUNDUR_SPEED: Serial.print(F("MUNDUR_SPEED")); break;
+    case CFG_KANAN: Serial.print(F("KANAN")); break;
+    case CFG_KANAN_SPEED: Serial.print(F("KANAN_SPEED")); break;
+    case CFG_KIRI: Serial.print(F("KIRI")); break;
+    case CFG_KIRI_SPEED: Serial.print(F("KIRI_SPEED")); break;
+    case CFG_BELOK_KANAN: Serial.print(F("BELOK_KANAN")); break;
+    case CFG_BELOK_KANAN_SPEED: Serial.print(F("BELOK_KANAN_SPEED")); break;
+    case CFG_BELOK_KIRI: Serial.print(F("BELOK_KIRI")); break;
+    case CFG_BELOK_KIRI_SPEED: Serial.print(F("BELOK_KIRI_SPEED")); break;
+    case CFG_SPEED: Serial.print(F("SPEED")); break;
+    case CFG_TUNGGU: Serial.print(F("TUNGGU")); break;
+    case CFG_BATAS_SCAN: Serial.print(F("BATAS_SCAN")); break;
+    case CFG_SCAN_JARAK: Serial.print(F("SCAN_JARAK")); break;
+    case CFG_DEKATI: Serial.print(F("DEKATI")); break;
+    case CFG_DEKATI_SPEED: Serial.print(F("DEKATI_SPEED")); break;
+    case CFG_JAUHI: Serial.print(F("JAUHI")); break;
+    case CFG_JAUHI_SPEED: Serial.print(F("JAUHI_SPEED")); break;
+    case CFG_CEK: Serial.print(F("CEK")); break;
+    case CFG_BUNYI: Serial.print(F("BUNYI")); break;
+    case CFG_BEEP: Serial.print(F("BEEP")); break;
+    case CFG_SERVO: Serial.print(F("SERVO")); break;
+    case CFG_FOLLOW_LINE: Serial.print(F("FOLLOW_LINE")); break;
+    case CFG_FOLLOW_LINE_SPEED: Serial.print(F("FOLLOW_LINE_SPEED")); break;
+    case CFG_MAJU_LINE: Serial.print(F("MAJU_LINE")); break;
+    case CFG_MAJU_LINE_SPEED: Serial.print(F("MAJU_LINE_SPEED")); break;
+    case CFG_MUNDUR_LINE: Serial.print(F("MUNDUR_LINE")); break;
+    case CFG_MUNDUR_LINE_SPEED: Serial.print(F("MUNDUR_LINE_SPEED")); break;
+    default: Serial.print(cfg); break;
+  }
+}
+
+void printInstructionInfo(const Instruction& inst) {
+  switch (inst.opcode) {
+    case OP_MAJU:
+      Serial.print(F("MAJU (jarak: "));
+      Serial.print(inst.p1);
+      Serial.print(F(" cm, kec: "));
+      Serial.print(inst.p2);
+      Serial.print(F(")"));
+      break;
+    case OP_MUNDUR:
+      Serial.print(F("MUNDUR (jarak: "));
+      Serial.print(inst.p1);
+      Serial.print(F(" cm, kec: "));
+      Serial.print(inst.p2);
+      Serial.print(F(")"));
+      break;
+    case OP_KANAN:
+      Serial.print(F("KANAN (sudut: "));
+      Serial.print(inst.p1);
+      Serial.print(F(" deg, kec: "));
+      Serial.print(inst.p2);
+      Serial.print(F(")"));
+      break;
+    case OP_KIRI:
+      Serial.print(F("KIRI (sudut: "));
+      Serial.print(inst.p1);
+      Serial.print(F(" deg, kec: "));
+      Serial.print(inst.p2);
+      Serial.print(F(")"));
+      break;
+    case OP_BELOK_KANAN:
+      Serial.print(F("BELOK_KANAN (sudut: "));
+      Serial.print(inst.p1);
+      Serial.print(F(" deg, kec: "));
+      Serial.print(inst.p2);
+      Serial.print(F(")"));
+      break;
+    case OP_BELOK_KIRI:
+      Serial.print(F("BELOK_KIRI (sudut: "));
+      Serial.print(inst.p1);
+      Serial.print(F(" deg, kec: "));
+      Serial.print(inst.p2);
+      Serial.print(F(")"));
+      break;
+    case OP_STOP:
+      Serial.print(F("STOP"));
+      break;
+    case OP_SPEED:
+      Serial.print(F("SPEED ("));
+      Serial.print(inst.p1);
+      Serial.print(F(")"));
+      break;
+    case OP_TUNGGU:
+      Serial.print(F("TUNGGU ("));
+      Serial.print(inst.p1);
+      Serial.print(F(" ms)"));
+      break;
+    case OP_UKUR_JARAK:
+      Serial.print(F("UKUR_JARAK"));
+      break;
+    case OP_SCAN_KANAN:
+      Serial.print(F("SCAN_KANAN (jarak: "));
+      Serial.print(inst.p1);
+      Serial.print(F(" cm, sudut: "));
+      Serial.print(inst.p2);
+      Serial.print(F(" deg)"));
+      break;
+    case OP_SCAN_KIRI:
+      Serial.print(F("SCAN_KIRI (jarak: "));
+      Serial.print(inst.p1);
+      Serial.print(F(" cm, sudut: "));
+      Serial.print(inst.p2);
+      Serial.print(F(" deg)"));
+      break;
+    case OP_DEKATI_OBJEK:
+      Serial.print(F("DEKATI_OBJEK (target: "));
+      Serial.print(inst.p1);
+      Serial.print(F(" cm, kec: "));
+      Serial.print(inst.p2);
+      Serial.print(F(")"));
+      break;
+    case OP_JAUHI_OBJEK:
+      Serial.print(F("JAUHI_OBJEK (target: "));
+      Serial.print(inst.p1);
+      Serial.print(F(" cm, kec: "));
+      Serial.print(inst.p2);
+      Serial.print(F(")"));
+      break;
+    case OP_CEK_OBJEK:
+      Serial.print(F("CEK_OBJEK (batas: "));
+      Serial.print(inst.p1);
+      Serial.print(F(" cm)"));
+      break;
+    case OP_BATAS_SCAN:
+      Serial.print(F("BATAS_SCAN (sudut: "));
+      Serial.print(inst.p1);
+      Serial.print(F(" deg)"));
+      break;
+    case OP_CAPIT:
+      Serial.print(F("CAPIT (tutup)"));
+      break;
+    case OP_LEPAS:
+      Serial.print(F("LEPAS (buka)"));
+      break;
+    case OP_BUNYI:
+      Serial.print(F("BUNYI ("));
+      Serial.print(inst.p1);
+      Serial.print(F(" kali)"));
+      break;
+    case OP_BEEP:
+      Serial.print(F("BEEP (freq: "));
+      Serial.print(inst.p1);
+      Serial.print(F(" Hz, dur: "));
+      Serial.print(inst.p2);
+      Serial.print(F(" ms)"));
+      break;
+    case OP_LED:
+      Serial.print(F("LED (mode: "));
+      Serial.print(inst.p1);
+      if (inst.p1 == 10) {
+        Serial.print(F(", warna: "));
+        Serial.print(inst.p2);
+      }
+      Serial.print(F(")"));
+      break;
+    case OP_LED_WARNA:
+      Serial.print(F("LED_WARNA ("));
+      Serial.print(inst.p1);
+      Serial.print(F(")"));
+      break;
+    case OP_LED_KEDIP:
+      Serial.print(F("LED_KEDIP (jumlah: "));
+      Serial.print(inst.p1);
+      Serial.print(F(", jeda: "));
+      Serial.print(inst.p2);
+      Serial.print(F(" ms)"));
+      break;
+    case OP_LAPOR_JARAK:
+      Serial.print(F("LAPOR_JARAK"));
+      break;
+    case OP_EMERGENCY_STOP:
+      Serial.print(F("EMERGENCY_STOP"));
+      break;
+    case OP_END:
+      Serial.print(F("END"));
+      break;
+    case OP_SERVO:
+      Serial.print(F("SERVO (sudut: "));
+      Serial.print(inst.p1);
+      Serial.print(F(")"));
+      break;
+    case OP_FOLLOW_LINE:
+      Serial.print(F("FOLLOW_LINE (persimpangan: "));
+      Serial.print(inst.p1);
+      Serial.print(F(", kec: "));
+      Serial.print(inst.p2);
+      Serial.print(F(")"));
+      break;
+    case OP_MAJU_LINE:
+      Serial.print(F("MAJU_LINE (jarak: "));
+      Serial.print(inst.p1);
+      Serial.print(F(" cm, kec: "));
+      Serial.print(inst.p2);
+      Serial.print(F(")"));
+      break;
+    case OP_MUNDUR_LINE:
+      Serial.print(F("MUNDUR_LINE (jarak: "));
+      Serial.print(inst.p1);
+      Serial.print(F(" cm, kec: "));
+      Serial.print(inst.p2);
+      Serial.print(F(")"));
+      break;
+    case OP_STOP_LINE:
+      Serial.print(F("STOP_LINE"));
+      break;
+    case OP_KALIBRASI:
+      Serial.print(F("KALIBRASI"));
+      break;
+    case OP_CONFIG:
+      Serial.print(F("CONFIG ("));
+      printConfigParamName(inst.p1);
+      Serial.print(F(" = "));
+      Serial.print(inst.p2);
+      Serial.print(F(")"));
+      break;
+    default:
+      Serial.print(F("UNKNOWN"));
+      break;
+  }
+}
+
+bool enqueueToken() {
+  if (tokenLen == 0) return false;
+  tokenBuf[tokenLen] = '\0';
+  Serial.print(F("[RECV] Token: \""));
+  Serial.print(tokenBuf);
+  Serial.println(F("\""));
+  Instruction inst;
+  bool ok = parseInstruction(tokenBuf, inst);
+  if (ok) {
+    if (commandCount < MAX_COMMANDS) {
+      commandQueue[commandCount++] = inst;
+      Serial.print(F("[RECV] Parsing OK -> "));
+      printInstructionInfo(inst);
+      Serial.print(F(" | Antrean: "));
+      Serial.println(commandCount);
+    } else {
+      Serial.println(F("[RECV] Error: Antrean penuh"));
+    }
+  } else {
+    Serial.print(F("[RECV] Error: Perintah tidak valid (\""));
+    Serial.print(tokenBuf);
+    Serial.println(F("\")"));
+  }
+  tokenLen = 0;
+  tokenBuf[0] = '\0';
+  return ok;
+}
+
 void setup() {
   Leanbot.begin();
   LbIRLine.doManualCalibration(TB1A);
@@ -182,10 +469,12 @@ void setup() {
   prefixBuf[0] = '\0';
   Serial.print(F("FREE_RAM:"));
   Serial.println(freeRam());
+  updateRobotState(STATE_READY);
 }
 
 void triggerEmergencyStop() {
   emergencyFlag = true;
+  updateRobotState(STATE_EMERGENCY);
   LbMotion.runLR(0, 0);
   LbMotion.stopAndWait();
   Leanbot.noTone();
@@ -199,10 +488,12 @@ void triggerEmergencyStop() {
   prefixBuf[0] = '\0';
   while (Serial.available() > 0) Serial.read();
   Serial.println(F("EMERGENCY_STOP"));
+  Serial.println(F("[STATE] EMERGENCY_STOP aktif"));
 }
 
 bool checkEmergency() {
   if (LbTouch.onPress(TB2A) || LbTouch.onPress(TB2B)) {
+    Serial.println(F("[RECV] Tombol darurat TB2 disentuh"));
     triggerEmergencyStop();
     return true;
   }
@@ -216,6 +507,7 @@ bool checkEmergency() {
       }
       buf[len] = '\0';
       if (strstr_P(buf, PSTR("STOP")) != NULL || strstr_P(buf, PSTR("stop")) != NULL) {
+        Serial.println(F("[RECV] Perintah STOP diterima"));
         triggerEmergencyStop();
         return true;
       }
@@ -242,6 +534,7 @@ void loop() {
       }
 
       if (strstr_P(prefixBuf, PSTR("STOP")) != NULL || strstr_P(prefixBuf, PSTR("stop")) != NULL) {
+        Serial.println(F("[RECV] Perintah STOP terdeteksi di prefix"));
         triggerEmergencyStop();
         return;
       }
@@ -253,35 +546,19 @@ void loop() {
         prefixLen = 0;
         prefixBuf[0] = '\0';
         tokenBuf[0] = '\0';
+        updateRobotState(STATE_RECEIVING);
+        Serial.println(F("[RECV] Header CODE; diterima"));
       }
     } else {
       if (c == ';') {
-        if (tokenLen > 0) {
-          tokenBuf[tokenLen] = '\0';
-          Instruction inst;
-          if (parseInstruction(tokenBuf, inst)) {
-            if (commandCount < MAX_COMMANDS) {
-              commandQueue[commandCount++] = inst;
-            }
-          }
-          tokenLen = 0;
-          tokenBuf[0] = '\0';
-        }
+        enqueueToken();
       } else if (c == '\n' || c == '\r') {
-        if (tokenLen > 0) {
-          tokenBuf[tokenLen] = '\0';
-          Instruction inst;
-          if (parseInstruction(tokenBuf, inst)) {
-            if (commandCount < MAX_COMMANDS) {
-              commandQueue[commandCount++] = inst;
-            }
-          }
-          tokenLen = 0;
-          tokenBuf[0] = '\0';
-        }
+        enqueueToken();
         inPacket = false;
         prefixLen = 0;
         prefixBuf[0] = '\0';
+        Serial.print(F("[RECV] Paket selesai (newline). Total instruksi: "));
+        Serial.println(commandCount);
         executeCommandQueue();
         return;
       } else {
@@ -294,20 +571,12 @@ void loop() {
   }
 
   if (inPacket && (millis() - lastRxTime > 350)) {
-    if (tokenLen > 0) {
-      tokenBuf[tokenLen] = '\0';
-      Instruction inst;
-      if (parseInstruction(tokenBuf, inst)) {
-        if (commandCount < MAX_COMMANDS) {
-          commandQueue[commandCount++] = inst;
-        }
-      }
-      tokenLen = 0;
-      tokenBuf[0] = '\0';
-    }
+    enqueueToken();
     inPacket = false;
     prefixLen = 0;
     prefixBuf[0] = '\0';
+    Serial.print(F("[RECV] Timeout RX, paket selesai. Total instruksi: "));
+    Serial.println(commandCount);
     executeCommandQueue();
   }
 }
@@ -375,10 +644,21 @@ void scanObject(int dir, int maxDistCm, int maxDeg) {
   if (maxDistCm <= 0) maxDistCm = defaultScanDist;
   if (maxDeg <= 0) maxDeg = defaultScanAngle;
 
+  Serial.print(F("[STATE] Memulai scan "));
+  Serial.print(dir > 0 ? F("kanan") : F("kiri"));
+  Serial.print(F(" | Batas jarak: "));
+  Serial.print(maxDistCm);
+  Serial.print(F(" cm | Sudut: "));
+  Serial.print(maxDeg);
+  Serial.println(F(" deg"));
+
   int d = Leanbot.pingCm();
   if (d > 0 && d <= maxDistCm) {
     Serial.print(F("OBJEK:"));
     Serial.println(d);
+    Serial.print(F("[STATE] Objek langsung terdeteksi: "));
+    Serial.print(d);
+    Serial.println(F(" cm"));
     return;
   }
 
@@ -413,14 +693,24 @@ void scanObject(int dir, int maxDistCm, int maxDeg) {
   if (found) {
     Serial.print(F("OBJEK:"));
     Serial.println(foundDist);
+    Serial.print(F("[STATE] Objek ditemukan pada sudut "));
+    Serial.print(traveledDeg);
+    Serial.print(F(" deg, jarak: "));
+    Serial.print(foundDist);
+    Serial.println(F(" cm"));
   } else {
     Serial.println(F("OBJEK:TIDAK_ADA"));
+    Serial.println(F("[STATE] Objek tidak ditemukan selama scan"));
   }
 }
 
 void approachObject(int targetCm, int speed) {
   if (emergencyFlag) return;
   if (targetCm <= 0) targetCm = defaultDekati;
+
+  Serial.print(F("[STATE] Mendekati objek hingga "));
+  Serial.print(targetCm);
+  Serial.println(F(" cm"));
 
   int d = Leanbot.pingCm();
   if (d <= 0 || d <= targetCm || d > 80) {
@@ -455,13 +745,21 @@ void approachObject(int targetCm, int speed) {
   }
 
   LbMotion.stopAndWait();
+  int finalDist = Leanbot.pingCm();
   Serial.print(F("JARAK_AKHIR:"));
-  Serial.println(Leanbot.pingCm());
+  Serial.println(finalDist);
+  Serial.print(F("[STATE] Selesai mendekati objek, jarak akhir: "));
+  Serial.print(finalDist);
+  Serial.println(F(" cm"));
 }
 
 void retreatObject(int targetCm, int speed) {
   if (emergencyFlag) return;
   if (targetCm <= 0) targetCm = defaultJauhi;
+
+  Serial.print(F("[STATE] Menjauhi objek hingga "));
+  Serial.print(targetCm);
+  Serial.println(F(" cm"));
 
   int d = Leanbot.pingCm();
   if (d <= 0 || d >= targetCm || d > 80) {
@@ -496,8 +794,12 @@ void retreatObject(int targetCm, int speed) {
   }
 
   LbMotion.stopAndWait();
+  int finalDist = Leanbot.pingCm();
   Serial.print(F("JARAK_AKHIR:"));
-  Serial.println(Leanbot.pingCm());
+  Serial.println(finalDist);
+  Serial.print(F("[STATE] Selesai menjauhi objek, jarak akhir: "));
+  Serial.print(finalDist);
+  Serial.println(F(" cm"));
 }
 
 void moveToLine(int dir, int maxDistCm, int speed) {
@@ -511,6 +813,7 @@ void moveToLine(int dir, int maxDistCm, int speed) {
     LbRGB.fillColor(CRGB::Green);
     LbRGB.show();
     playBunyi(1);
+    Serial.println(F("[STATE] Garis langsung terdeteksi"));
     return;
   }
 
@@ -536,6 +839,13 @@ void moveToLine(int dir, int maxDistCm, int speed) {
     LbRGB.fillColor(found ? CRGB::Green : CRGB::Red);
     LbRGB.show();
     playBunyi(1);
+    if (found) {
+      Serial.print(F("[STATE] Garis ditemukan pada jarak "));
+      Serial.print(traveledMm / 10);
+      Serial.println(F(" cm"));
+    } else {
+      Serial.println(F("[STATE] Garis tidak ditemukan hingga batas maksimum"));
+    }
   }
 }
 
@@ -570,6 +880,10 @@ void followLineUntilIntersection(int targetIntersections, int speed) {
 
     if (isIntersection) {
       intersectionsCount++;
+      Serial.print(F("[STATE] Persimpangan "));
+      Serial.print(intersectionsCount);
+      Serial.print(F("/"));
+      Serial.println(targetIntersections);
       if (intersectionsCount >= targetIntersections) break;
       LbMotion.runLR(spd, spd);
       LbMotion.waitDistanceMm(25);
@@ -606,6 +920,7 @@ void followLineUntilIntersection(int targetIntersections, int speed) {
           LbRGB.fillColor(CRGB::Red);
           LbRGB.show();
           playBunyi(1);
+          Serial.println(F("[STATE] Garis hilang (timeout)"));
           return;
         }
         break;
@@ -624,6 +939,7 @@ void followLineUntilIntersection(int targetIntersections, int speed) {
     LbRGB.fillColor(CRGB::Green);
     LbRGB.show();
     playBunyi(1);
+    Serial.println(F("[STATE] Selesai mencapai persimpangan"));
   }
 }
 
@@ -946,31 +1262,56 @@ void executeInstruction(const Instruction& inst) {
 
   switch (inst.opcode) {
     case OP_MAJU:
+      Serial.print(F("[STATE] Bergerak MAJU "));
+      Serial.print(inst.p1);
+      Serial.print(F(" cm | Kec: "));
+      Serial.println(inst.p2);
       moveMm(inst.p1 * 10, +1, inst.p2);
       break;
 
     case OP_MUNDUR:
+      Serial.print(F("[STATE] Bergerak MUNDUR "));
+      Serial.print(inst.p1);
+      Serial.print(F(" cm | Kec: "));
+      Serial.println(inst.p2);
       moveMm(inst.p1 * 10, -1, inst.p2);
       break;
 
     case OP_KANAN:
+      Serial.print(F("[STATE] ROTASI KANAN "));
+      Serial.print(inst.p1);
+      Serial.print(F(" deg | Kec: "));
+      Serial.println(inst.p2);
       rotateDeg(inst.p1, +1, inst.p2);
       break;
 
     case OP_KIRI:
+      Serial.print(F("[STATE] ROTASI KIRI "));
+      Serial.print(inst.p1);
+      Serial.print(F(" deg | Kec: "));
+      Serial.println(inst.p2);
       rotateDeg(inst.p1, -1, inst.p2);
       break;
 
     case OP_BELOK_KANAN:
+      Serial.print(F("[STATE] PIVOT KANAN "));
+      Serial.print(inst.p1);
+      Serial.print(F(" deg | Kec: "));
+      Serial.println(inst.p2);
       pivotTurnDeg(inst.p1, +1, inst.p2);
       break;
 
     case OP_BELOK_KIRI:
+      Serial.print(F("[STATE] PIVOT KIRI "));
+      Serial.print(inst.p1);
+      Serial.print(F(" deg | Kec: "));
+      Serial.println(inst.p2);
       pivotTurnDeg(inst.p1, -1, inst.p2);
       break;
 
     case OP_STOP:
     case OP_STOP_LINE:
+      Serial.println(F("[STATE] STOP MOTOR"));
       LbMotion.runLR(0, 0);
       LbMotion.stopAndWait();
       break;
@@ -985,14 +1326,20 @@ void executeInstruction(const Instruction& inst) {
       } else {
         currentSpeed = constrain(inst.p1, 350, 2000);
       }
+      Serial.print(F("[STATE] Kecepatan diatur ke "));
+      Serial.println(currentSpeed);
       break;
 
     case OP_TUNGGU:
+      Serial.print(F("[STATE] Menunggu "));
+      Serial.print(inst.p1);
+      Serial.println(F(" ms"));
       delayInterruptible(inst.p1);
       break;
 
     case OP_UKUR_JARAK:
     case OP_LAPOR_JARAK: {
+      Serial.println(F("[STATE] Mengukur jarak"));
       int d = Leanbot.pingCm();
       Serial.print(F("JARAK:"));
       Serial.println(d);
@@ -1000,32 +1347,41 @@ void executeInstruction(const Instruction& inst) {
     }
 
     case OP_SCAN_KANAN:
+      Serial.println(F("[STATE] SCAN KANAN"));
       scanObject(+1, inst.p1, inst.p2);
       break;
 
     case OP_SCAN_KIRI:
+      Serial.println(F("[STATE] SCAN KIRI"));
       scanObject(-1, inst.p1, inst.p2);
       break;
 
     case OP_DEKATI_OBJEK:
+      Serial.println(F("[STATE] Mendekati objek"));
       approachObject(inst.p1, inst.p2);
       break;
 
     case OP_JAUHI_OBJEK:
+      Serial.println(F("[STATE] Menjauhi objek"));
       retreatObject(inst.p1, inst.p2);
       break;
 
     case OP_CEK_OBJEK: {
+      Serial.println(F("[STATE] Memeriksa objek"));
       int d = Leanbot.pingCm();
       int limit = inst.p1 > 0 ? inst.p1 : defaultCek;
       if (d > 0 && d <= limit) {
         LbRGB.fillColor(CRGB::Green);
         LbRGB.show();
         playBunyi(3);
+        Serial.print(F("[STATE] Objek ditemukan: "));
+        Serial.print(d);
+        Serial.println(F(" cm"));
       } else {
         LbRGB.fillColor(CRGB::Red);
         LbRGB.show();
         playBunyi(1);
+        Serial.println(F("[STATE] Objek tidak ditemukan dalam batas"));
       }
       break;
     }
@@ -1034,32 +1390,48 @@ void executeInstruction(const Instruction& inst) {
       if (inst.p1 > 0) {
         defaultScanAngle = inst.p1;
       }
+      Serial.print(F("[STATE] Batas sudut scan: "));
+      Serial.println(defaultScanAngle);
       break;
 
     case OP_CAPIT:
+      Serial.println(F("[STATE] Menutup capit"));
       LbGripper.close();
       delayInterruptible(400);
       break;
 
     case OP_LEPAS:
+      Serial.println(F("[STATE] Membuka capit"));
       LbGripper.open();
       delayInterruptible(400);
       break;
 
     case OP_SERVO:
+      Serial.print(F("[STATE] Menggerakkan servo ke "));
+      Serial.println(inst.p1);
       LbGripper.close(inst.p1);
       delayInterruptible(400);
       break;
 
     case OP_BUNYI:
+      Serial.print(F("[STATE] Membunyikan buzzer "));
+      Serial.print(inst.p1);
+      Serial.println(F(" kali"));
       playBunyi(inst.p1);
       break;
 
     case OP_BEEP:
+      Serial.print(F("[STATE] BEEP freq "));
+      Serial.print(inst.p1);
+      Serial.print(F(" Hz | Durasi: "));
+      Serial.print(inst.p2);
+      Serial.println(F(" ms"));
       playBeep(inst.p1, inst.p2);
       break;
 
     case OP_LED:
+      Serial.print(F("[STATE] Mengatur LED mode "));
+      Serial.println(inst.p1);
       if (inst.p1 == 1) {
         LbRGB.fillColor(CRGB::White);
         LbRGB.show();
@@ -1089,11 +1461,18 @@ void executeInstruction(const Instruction& inst) {
       break;
 
     case OP_LED_WARNA:
+      Serial.print(F("[STATE] Mengatur LED warna "));
+      Serial.println(inst.p1);
       LbRGB.fillColor(getColorFromIndex(inst.p1));
       LbRGB.show();
       break;
 
     case OP_LED_KEDIP:
+      Serial.print(F("[STATE] Kedip LED "));
+      Serial.print(inst.p1);
+      Serial.print(F(" kali | Jeda: "));
+      Serial.print(inst.p2);
+      Serial.println(F(" ms"));
       blinkLed(inst.p1, inst.p2);
       break;
 
@@ -1102,11 +1481,16 @@ void executeInstruction(const Instruction& inst) {
       break;
 
     case OP_END:
+      Serial.println(F("[STATE] Program END"));
       LbMotion.runLR(0, 0);
       LbMotion.stopAndWait();
       break;
 
     case OP_FOLLOW_LINE:
+      Serial.print(F("[STATE] Follow line hingga "));
+      Serial.print(inst.p1);
+      Serial.print(F(" persimpangan | Kec: "));
+      Serial.println(inst.p2);
       if (inst.p1 > 0) {
         followLineUntilIntersection(inst.p1, inst.p2);
       } else {
@@ -1116,14 +1500,23 @@ void executeInstruction(const Instruction& inst) {
       break;
 
     case OP_MAJU_LINE:
+      Serial.print(F("[STATE] Maju mencari garis | Maks: "));
+      Serial.print(inst.p1);
+      Serial.print(F(" cm | Kec: "));
+      Serial.println(inst.p2);
       moveToLine(+1, inst.p1, inst.p2);
       break;
 
     case OP_MUNDUR_LINE:
+      Serial.print(F("[STATE] Mundur mencari garis | Maks: "));
+      Serial.print(inst.p1);
+      Serial.print(F(" cm | Kec: "));
+      Serial.println(inst.p2);
       moveToLine(-1, inst.p1, inst.p2);
       break;
 
     case OP_KALIBRASI:
+      Serial.println(F("[STATE] Kalibrasi sensor garis"));
       LbMotion.runLR(0, 0);
       LbMotion.stopAndWait();
       LbIRLine.doManualCalibration(TB1A);
@@ -1136,6 +1529,10 @@ void executeInstruction(const Instruction& inst) {
       break;
 
     case OP_CONFIG: {
+      Serial.print(F("[STATE] Ubah konfigurasi "));
+      printConfigParamName(inst.p1);
+      Serial.print(F(" -> "));
+      Serial.println(inst.p2);
       int16_t val = inst.p2;
       switch (inst.p1) {
         case CFG_MAJU: if (val > 0) defaultMaju = val; break;
@@ -1187,6 +1584,7 @@ void executeInstruction(const Instruction& inst) {
 void executeCommandQueue() {
   if (commandCount == 0) return;
   emergencyFlag = false;
+  updateRobotState(STATE_EXECUTING);
   LbRGB.fillColor(CRGB::Black);
   LbRGB.show();
   Serial.print(F("CODE_START:"));
@@ -1196,11 +1594,18 @@ void executeCommandQueue() {
   for (uint8_t i = 0; i < commandCount; i++) {
     if (checkEmergency()) break;
     if (emergencyFlag) break;
+    Serial.print(F("[EXEC] "));
+    Serial.print(i + 1);
+    Serial.print(F("/"));
+    Serial.print(commandCount);
+    Serial.print(F(" Melaksanakan: "));
+    printInstructionInfo(commandQueue[i]);
+    Serial.println();
     executeInstruction(commandQueue[i]);
-    delay(10);
-  }
-  if (!emergencyFlag) {
-    Serial.println(F("CODE_END"));
+    Serial.println(F("[EXEC] Selesai"));
+    if (i < commandCount - 1) {
+      delay(10);
+    }
   }
   commandCount = 0;
 }
@@ -1209,6 +1614,9 @@ void processCodePacket(char* payload) {
   while (*payload == ' ' || *payload == '\t' || *payload == ';') payload++;
   if (*payload == '\0') return;
 
+  Serial.print(F("[RECV] Memproses payload: "));
+  Serial.println(payload);
+  updateRobotState(STATE_RECEIVING);
   commandCount = 0;
   char* p = payload;
 
@@ -1223,11 +1631,24 @@ void processCodePacket(char* payload) {
       p++;
     }
 
+    Serial.print(F("[RECV] Token: \""));
+    Serial.print(seg);
+    Serial.println(F("\""));
     Instruction inst;
     if (parseInstruction(seg, inst)) {
       if (commandCount < MAX_COMMANDS) {
         commandQueue[commandCount++] = inst;
+        Serial.print(F("[RECV] Parsing OK -> "));
+        printInstructionInfo(inst);
+        Serial.print(F(" | Antrean: "));
+        Serial.println(commandCount);
+      } else {
+        Serial.println(F("[RECV] Error: Antrean penuh"));
       }
+    } else {
+      Serial.print(F("[RECV] Error: Perintah tidak valid (\""));
+      Serial.print(seg);
+      Serial.println(F("\")"));
     }
   }
 
