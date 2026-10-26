@@ -160,9 +160,7 @@ bool isLineDetected(int line) {
 void setup() {
   Leanbot.begin();
   LbIRLine.doManualCalibration(TB1A);
-  while (LbTouch.read(TB1A));
   delay(200);
-  LbTouch.readBits();
   LbRGB.fillColor(CRGB::Black);
   LbRGB.show();
   Leanbot.tone(1500, 100);
