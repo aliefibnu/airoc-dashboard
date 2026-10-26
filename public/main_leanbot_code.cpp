@@ -77,7 +77,7 @@ struct Instruction {
   int16_t p2;
 };
 
-const uint8_t MAX_COMMANDS = 24;
+const uint8_t MAX_COMMANDS = 48;
 Instruction commandQueue[MAX_COMMANDS];
 uint8_t commandCount = 0;
 
@@ -117,8 +117,13 @@ int16_t defaultServo = 90;
 int16_t defaultFollowLine = 1;
 int16_t defaultFollowLineSpeed = 5;
 
-char rxBuf[160];
-uint8_t rxLen = 0;
+char tokenBuf[48];
+uint8_t tokenLen = 0;
+char prefixBuf[8];
+uint8_t prefixLen = 0;
+char emergencyBuf[16];
+uint8_t emergencyLen = 0;
+bool inPacket = false;
 unsigned long lastRxTime = 0;
 
 int16_t toMotorSpeed(int16_t spd);
@@ -141,6 +146,7 @@ uint8_t parseColorIndex(const char* s);
 CRGB getColorFromIndex(uint8_t idx);
 bool parseInstruction(char* str, Instruction& inst);
 void executeInstruction(const Instruction& inst);
+void executeCommandQueue();
 void processCodePacket(char* payload);
 
 int16_t toMotorSpeed(int16_t spd) {
@@ -160,63 +166,22 @@ bool isLineDetected(int line) {
 void setup() {
   Leanbot.begin();
   LbIRLine.doManualCalibration(TB1A);
+  while (LbTouch.read(TB1A));
   delay(200);
+  LbTouch.readBits();
   LbRGB.fillColor(CRGB::Black);
   LbRGB.show();
   Leanbot.tone(1500, 100);
   while (Serial.available() > 0) {
     Serial.read();
   }
-  rxLen = 0;
-  rxBuf[0] = '\0';
-}
-
-void loop() {
-  checkEmergency();
-
-  while (Serial.available() > 0) {
-    char c = Serial.read();
-    if (rxLen < sizeof(rxBuf) - 1) {
-      rxBuf[rxLen++] = c;
-      rxBuf[rxLen] = '\0';
-    }
-    lastRxTime = millis();
-  }
-
-  if (rxLen > 0) {
-    char* codePtr = strstr_P(rxBuf, PSTR("CODE;"));
-    if (codePtr != NULL) {
-      if (codePtr > rxBuf) {
-        memmove(rxBuf, codePtr, strlen(codePtr) + 1);
-        rxLen = strlen(rxBuf);
-      }
-      char lastChar = rxBuf[rxLen - 1];
-      bool hasNewline = (lastChar == '\n' || lastChar == '\r');
-      bool hasTimeout = (millis() - lastRxTime > 80);
-
-      if (hasNewline || hasTimeout) {
-        while (rxLen > 0 && (rxBuf[rxLen - 1] == '\r' || rxBuf[rxLen - 1] == '\n' || rxBuf[rxLen - 1] == ' ' || rxBuf[rxLen - 1] == '\t')) {
-          rxBuf[--rxLen] = '\0';
-        }
-        processCodePacket(rxBuf + 5);
-        rxLen = 0;
-        rxBuf[0] = '\0';
-      }
-    } else {
-      if (rxLen > 10) {
-        char temp[5];
-        uint8_t keep = (rxLen >= 4) ? 4 : rxLen;
-        memcpy(temp, rxBuf + rxLen - keep, keep);
-        temp[keep] = '\0';
-        memcpy(rxBuf, temp, keep + 1);
-        rxLen = keep;
-      }
-      if (millis() - lastRxTime > 200) {
-        rxLen = 0;
-        rxBuf[0] = '\0';
-      }
-    }
-  }
+  inPacket = false;
+  tokenLen = 0;
+  tokenBuf[0] = '\0';
+  prefixLen = 0;
+  prefixBuf[0] = '\0';
+  emergencyLen = 0;
+  emergencyBuf[0] = '\0';
 }
 
 void triggerEmergencyStop() {
@@ -227,6 +192,13 @@ void triggerEmergencyStop() {
   LbRGB.fillColor(CRGB::Red);
   LbRGB.show();
   commandCount = 0;
+  inPacket = false;
+  tokenLen = 0;
+  tokenBuf[0] = '\0';
+  prefixLen = 0;
+  prefixBuf[0] = '\0';
+  emergencyLen = 0;
+  emergencyBuf[0] = '\0';
   Serial.println(F("EMERGENCY_STOP"));
 }
 
@@ -238,17 +210,105 @@ void checkEmergency() {
 
   while (Serial.available() > 0) {
     char c = Serial.read();
-    if (rxLen < sizeof(rxBuf) - 1) {
-      rxBuf[rxLen++] = c;
-      rxBuf[rxLen] = '\0';
+    if (emergencyLen < sizeof(emergencyBuf) - 1) {
+      emergencyBuf[emergencyLen++] = c;
+      emergencyBuf[emergencyLen] = '\0';
+    } else {
+      memmove(emergencyBuf, emergencyBuf + 1, sizeof(emergencyBuf) - 2);
+      emergencyBuf[sizeof(emergencyBuf) - 2] = c;
+      emergencyBuf[sizeof(emergencyBuf) - 1] = '\0';
     }
-    lastRxTime = millis();
-    if (strstr_P(rxBuf, PSTR("EMERGENCY_STOP")) != NULL || strstr_P(rxBuf, PSTR("STOP")) != NULL) {
+    if (strstr_P(emergencyBuf, PSTR("STOP")) != NULL) {
       triggerEmergencyStop();
-      rxLen = 0;
-      rxBuf[0] = '\0';
       return;
     }
+  }
+}
+
+void loop() {
+  if (LbTouch.onPress(TB2A) || LbTouch.onPress(TB2B)) {
+    triggerEmergencyStop();
+    return;
+  }
+
+  while (Serial.available() > 0) {
+    char c = Serial.read();
+    lastRxTime = millis();
+
+    if (!inPacket) {
+      if (prefixLen < sizeof(prefixBuf) - 1) {
+        prefixBuf[prefixLen++] = c;
+        prefixBuf[prefixLen] = '\0';
+      } else {
+        memmove(prefixBuf, prefixBuf + 1, sizeof(prefixBuf) - 2);
+        prefixBuf[sizeof(prefixBuf) - 2] = c;
+        prefixBuf[sizeof(prefixBuf) - 1] = '\0';
+      }
+
+      if (strstr_P(prefixBuf, PSTR("STOP")) != NULL) {
+        triggerEmergencyStop();
+        return;
+      }
+
+      if (strstr_P(prefixBuf, PSTR("CODE;")) != NULL || strstr_P(prefixBuf, PSTR("code;")) != NULL) {
+        inPacket = true;
+        commandCount = 0;
+        tokenLen = 0;
+        prefixLen = 0;
+        prefixBuf[0] = '\0';
+      }
+    } else {
+      if (c == ';') {
+        if (tokenLen > 0) {
+          tokenBuf[tokenLen] = '\0';
+          Instruction inst;
+          if (parseInstruction(tokenBuf, inst)) {
+            if (commandCount < MAX_COMMANDS) {
+              commandQueue[commandCount++] = inst;
+            }
+          }
+          tokenLen = 0;
+        }
+      } else if (c == '\n' || c == '\r') {
+        if (tokenLen > 0) {
+          tokenBuf[tokenLen] = '\0';
+          Instruction inst;
+          if (parseInstruction(tokenBuf, inst)) {
+            if (commandCount < MAX_COMMANDS) {
+              commandQueue[commandCount++] = inst;
+            }
+          }
+          tokenLen = 0;
+        }
+        inPacket = false;
+        prefixLen = 0;
+        prefixBuf[0] = '\0';
+        executeCommandQueue();
+        return;
+      } else {
+        if (tokenLen < sizeof(tokenBuf) - 1) {
+          tokenBuf[tokenLen++] = c;
+          tokenBuf[tokenLen] = '\0';
+        }
+      }
+    }
+  }
+
+  if (inPacket && (millis() - lastRxTime > 350)) {
+    if (tokenLen > 0) {
+      tokenBuf[tokenLen] = '\0';
+      Instruction inst;
+      if (parseInstruction(tokenBuf, inst)) {
+        if (commandCount < MAX_COMMANDS) {
+          commandQueue[commandCount++] = inst;
+        }
+      }
+      tokenLen = 0;
+    }
+    inPacket = false;
+    prefixLen = 0;
+    prefixBuf[0] = '\0';
+    executeCommandQueue();
   }
 }
 
@@ -1161,6 +1221,24 @@ void executeInstruction(const Instruction& inst) {
   }
 }
 
+void executeCommandQueue() {
+  if (commandCount == 0) return;
+  emergencyFlag = false;
+  LbRGB.fillColor(CRGB::Black);
+  LbRGB.show();
+  Serial.print(F("CODE_START:"));
+  Serial.println(commandCount);
+  for (uint8_t i = 0; i < commandCount; i++) {
+    checkEmergency();
+    if (emergencyFlag) break;
+    executeInstruction(commandQueue[i]);
+  }
+  if (!emergencyFlag) {
+    Serial.println(F("CODE_END"));
+  }
+  commandCount = 0;
+}
+
 void processCodePacket(char* payload) {
   while (*payload == ' ' || *payload == '\t' || *payload == ';') payload++;
   if (*payload == '\0') return;
@@ -1187,19 +1265,5 @@ void processCodePacket(char* payload) {
     }
   }
 
-  if (commandCount > 0) {
-    emergencyFlag = false;
-    LbRGB.fillColor(CRGB::Black);
-    LbRGB.show();
-    Serial.print(F("CODE_START:"));
-    Serial.println(commandCount);
-    for (uint8_t i = 0; i < commandCount; i++) {
-      checkEmergency();
-      if (emergencyFlag) break;
-      executeInstruction(commandQueue[i]);
-    }
-    if (!emergencyFlag) {
-      Serial.println(F("CODE_END"));
-    }
-  }
+  executeCommandQueue();
 }

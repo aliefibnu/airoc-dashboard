@@ -168,7 +168,8 @@ class BleService {
       throw new Error("Perangkat Bluetooth belum terhubung!");
     }
     const trimmed = commandStr.trim();
-    const fullCmd = trimmed.toUpperCase().startsWith("CODE;") ? trimmed : `CODE;${trimmed}`;
+    const rawCmd = trimmed.toUpperCase().startsWith("CODE;") ? trimmed : `CODE;${trimmed}`;
+    const fullCmd = rawCmd.endsWith("\n") ? rawCmd : `${rawCmd}\n`;
     const encoder = new TextEncoder();
     const data = encoder.encode(fullCmd);
     const CHUNK_SIZE = 20;
