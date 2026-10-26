@@ -106,36 +106,62 @@ class InstructionDefaultsService {
     const scanAngle = this.getDefault("BATAS_SCAN", "sudut_deg") ?? 90;
     const scanDist = this.getDefault("SCAN_KANAN", "jarak_cm") ?? 20;
     const majuVal = this.getDefault("MAJU", "cm") ?? 10;
+    const majuSpeed = this.getDefault("MAJU", "speed") ?? speedVal;
     const mundurVal = this.getDefault("MUNDUR", "cm") ?? 10;
+    const mundurSpeed = this.getDefault("MUNDUR", "speed") ?? speedVal;
     const kananVal = this.getDefault("KANAN", "deg") ?? 90;
+    const kananSpeed = this.getDefault("KANAN", "speed") ?? speedVal;
     const kiriVal = this.getDefault("KIRI", "deg") ?? 90;
+    const kiriSpeed = this.getDefault("KIRI", "speed") ?? speedVal;
+    const belokKananVal = this.getDefault("BELOK_KANAN", "deg") ?? 90;
+    const belokKananSpeed = this.getDefault("BELOK_KANAN", "speed") ?? speedVal;
+    const belokKiriVal = this.getDefault("BELOK_KIRI", "deg") ?? 90;
+    const belokKiriSpeed = this.getDefault("BELOK_KIRI", "speed") ?? speedVal;
     const dekatiVal = this.getDefault("DEKATI_OBJEK", "jarak_akhir_cm") ?? 6;
+    const dekatiSpeed = this.getDefault("DEKATI_OBJEK", "speed") ?? speedVal;
     const jauhiVal = this.getDefault("JAUHI_OBJEK", "jarak_akhir_cm") ?? 20;
+    const jauhiSpeed = this.getDefault("JAUHI_OBJEK", "speed") ?? speedVal;
     const cekVal = this.getDefault("CEK_OBJEK", "jarak_cm") ?? 20;
     const tungguVal = this.getDefault("TUNGGU", "ms") ?? 1000;
     const bunyiVal = this.getDefault("BUNYI", "jumlah") ?? 1;
     const followLineVal = this.getDefault("FOLLOW_LINE", "jumlah_simpangan") ?? 1;
+    const followLineSpeed = this.getDefault("FOLLOW_LINE", "speed") ?? speedVal;
     const majuLineVal = this.getDefault("MAJU_LINE", "max_cm") ?? 50;
+    const majuLineSpeed = this.getDefault("MAJU_LINE", "speed") ?? speedVal;
     const mundurLineVal = this.getDefault("MUNDUR_LINE", "max_cm") ?? 50;
+    const mundurLineSpeed = this.getDefault("MUNDUR_LINE", "speed") ?? speedVal;
 
     const parts = [
       `SPEED:${speedVal}`,
       `BATAS_SCAN:${scanAngle}`,
       `CONFIG:MAJU,${majuVal}`,
+      `CONFIG:MAJU_SPEED,${majuSpeed}`,
       `CONFIG:MUNDUR,${mundurVal}`,
+      `CONFIG:MUNDUR_SPEED,${mundurSpeed}`,
       `CONFIG:KANAN,${kananVal}`,
+      `CONFIG:KANAN_SPEED,${kananSpeed}`,
       `CONFIG:KIRI,${kiriVal}`,
+      `CONFIG:KIRI_SPEED,${kiriSpeed}`,
+      `CONFIG:BELOK_KANAN,${belokKananVal}`,
+      `CONFIG:BELOK_KANAN_SPEED,${belokKananSpeed}`,
+      `CONFIG:BELOK_KIRI,${belokKiriVal}`,
+      `CONFIG:BELOK_KIRI_SPEED,${belokKiriSpeed}`,
       `CONFIG:SPEED,${speedVal}`,
       `CONFIG:BATAS_SCAN,${scanAngle}`,
       `CONFIG:SCAN_JARAK,${scanDist}`,
       `CONFIG:DEKATI,${dekatiVal}`,
+      `CONFIG:DEKATI_SPEED,${dekatiSpeed}`,
       `CONFIG:JAUHI,${jauhiVal}`,
+      `CONFIG:JAUHI_SPEED,${jauhiSpeed}`,
       `CONFIG:CEK,${cekVal}`,
       `CONFIG:TUNGGU,${tungguVal}`,
       `CONFIG:BUNYI,${bunyiVal}`,
       `CONFIG:FOLLOW_LINE,${followLineVal}`,
+      `CONFIG:FOLLOW_LINE_SPEED,${followLineSpeed}`,
       `CONFIG:MAJU_LINE,${majuLineVal}`,
+      `CONFIG:MAJU_LINE_SPEED,${majuLineSpeed}`,
       `CONFIG:MUNDUR_LINE,${mundurLineVal}`,
+      `CONFIG:MUNDUR_LINE_SPEED,${mundurLineSpeed}`,
     ];
 
     return `CODE;${parts.join(";")}`;

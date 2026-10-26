@@ -7,6 +7,8 @@ enum Opcode {
   OP_MUNDUR,
   OP_KANAN,
   OP_KIRI,
+  OP_BELOK_KANAN,
+  OP_BELOK_KIRI,
   OP_STOP,
   OP_SPEED,
   OP_TUNGGU,
@@ -36,6 +38,39 @@ enum Opcode {
   OP_CONFIG
 };
 
+enum ConfigParam {
+  CFG_MAJU = 1,
+  CFG_MAJU_SPEED,
+  CFG_MUNDUR,
+  CFG_MUNDUR_SPEED,
+  CFG_KANAN,
+  CFG_KANAN_SPEED,
+  CFG_KIRI,
+  CFG_KIRI_SPEED,
+  CFG_BELOK_KANAN,
+  CFG_BELOK_KANAN_SPEED,
+  CFG_BELOK_KIRI,
+  CFG_BELOK_KIRI_SPEED,
+  CFG_SPEED,
+  CFG_TUNGGU,
+  CFG_BATAS_SCAN,
+  CFG_SCAN_JARAK,
+  CFG_DEKATI,
+  CFG_DEKATI_SPEED,
+  CFG_JAUHI,
+  CFG_JAUHI_SPEED,
+  CFG_CEK,
+  CFG_BUNYI,
+  CFG_BEEP,
+  CFG_SERVO,
+  CFG_FOLLOW_LINE,
+  CFG_FOLLOW_LINE_SPEED,
+  CFG_MAJU_LINE,
+  CFG_MAJU_LINE_SPEED,
+  CFG_MUNDUR_LINE,
+  CFG_MUNDUR_LINE_SPEED
+};
+
 struct Instruction {
   uint8_t opcode;
   int16_t p1;
@@ -51,38 +86,54 @@ int16_t scanMaxAngle = 90;
 volatile bool emergencyFlag = false;
 
 int16_t defaultMaju = 10;
+int16_t defaultMajuSpeed = 5;
 int16_t defaultMundur = 10;
+int16_t defaultMundurSpeed = 5;
 int16_t defaultKanan = 90;
+int16_t defaultKananSpeed = 5;
 int16_t defaultKiri = 90;
+int16_t defaultKiriSpeed = 5;
+int16_t defaultBelokKanan = 90;
+int16_t defaultBelokKananSpeed = 5;
+int16_t defaultBelokKiri = 90;
+int16_t defaultBelokKiriSpeed = 5;
 int16_t defaultSpeed = 5;
 int16_t defaultTunggu = 1000;
 int16_t defaultScanDist = 20;
 int16_t defaultScanAngle = 90;
 int16_t defaultDekati = 6;
+int16_t defaultDekatiSpeed = 5;
 int16_t defaultJauhi = 20;
+int16_t defaultJauhiSpeed = 5;
 int16_t defaultCek = 20;
 int16_t defaultMajuLine = 50;
+int16_t defaultMajuLineSpeed = 5;
 int16_t defaultMundurLine = 50;
+int16_t defaultMundurLineSpeed = 5;
 int16_t defaultBunyi = 1;
 int16_t defaultBeepFreq = 1500;
 int16_t defaultBeepDur = 100;
 int16_t defaultServo = 90;
 int16_t defaultFollowLine = 1;
+int16_t defaultFollowLineSpeed = 5;
 
 char rxBuf[160];
 uint8_t rxLen = 0;
 unsigned long lastRxTime = 0;
 
+int16_t toMotorSpeed(int16_t spd);
+bool isLineDetected(int line);
 void triggerEmergencyStop();
 void checkEmergency();
 void delayInterruptible(unsigned long ms);
-void moveMm(int mm, int dir);
-void rotateDeg(int deg, int dir);
+void moveMm(int mm, int dir, int speed);
+void rotateDeg(int deg, int dir, int speed);
+void pivotTurnDeg(int deg, int dir, int speed);
 void scanObject(int dir, int maxDistCm, int maxDeg);
-void approachObject(int targetCm);
-void retreatObject(int targetCm);
-void moveToLine(int dir, int maxDistCm);
-void followLineUntilIntersection(int targetIntersections);
+void approachObject(int targetCm, int speed);
+void retreatObject(int targetCm, int speed);
+void moveToLine(int dir, int maxDistCm, int speed);
+void followLineUntilIntersection(int targetIntersections, int speed);
 void playBunyi(int count);
 void playBeep(int freq, int duration);
 void blinkLed(int count, int intervalMs);
@@ -91,6 +142,20 @@ CRGB getColorFromIndex(uint8_t idx);
 bool parseInstruction(char* str, Instruction& inst);
 void executeInstruction(const Instruction& inst);
 void processCodePacket(char* payload);
+
+int16_t toMotorSpeed(int16_t spd) {
+  if (spd <= 0) return currentSpeed > 0 ? currentSpeed : 1000;
+  if (spd <= 10) return map(spd, 1, 10, 400, 2000);
+  if (spd <= 255) return map(spd, 0, 255, 350, 2000);
+  return constrain(spd, 350, 2000);
+}
+
+bool isLineDetected(int line) {
+  uint8_t bits = line & 0b1111;
+  if ((bits & 0b0110) == 0b0110) return true;
+  uint8_t count = (bits & 1) + ((bits >> 1) & 1) + ((bits >> 2) & 1) + ((bits >> 3) & 1);
+  return count >= 3;
+}
 
 void setup() {
   Leanbot.begin();
@@ -198,9 +263,9 @@ void delayInterruptible(unsigned long ms) {
   }
 }
 
-void moveMm(int mm, int dir) {
+void moveMm(int mm, int dir, int speed) {
   if (emergencyFlag || mm <= 0) return;
-  int spd = currentSpeed > 0 ? currentSpeed : 1000;
+  int spd = speed > 0 ? toMotorSpeed(speed) : (currentSpeed > 0 ? currentSpeed : 1000);
   LbMotion.runLR(dir * spd, dir * spd);
   int remaining = mm;
   while (remaining > 0 && !emergencyFlag) {
@@ -212,13 +277,31 @@ void moveMm(int mm, int dir) {
   LbMotion.stopAndWait();
 }
 
-void rotateDeg(int deg, int dir) {
+void rotateDeg(int deg, int dir, int speed) {
   if (emergencyFlag || deg <= 0) return;
-  int spd = currentSpeed > 0 ? currentSpeed : 1000;
+  int spd = speed > 0 ? toMotorSpeed(speed) : (currentSpeed > 0 ? currentSpeed : 1000);
   if (dir > 0) {
     LbMotion.runLR(+spd, -spd);
   } else {
     LbMotion.runLR(-spd, +spd);
+  }
+  int remaining = deg;
+  while (remaining > 0 && !emergencyFlag) {
+    int step = remaining > 45 ? 45 : remaining;
+    LbMotion.waitRotationDeg(dir * step);
+    remaining -= step;
+    checkEmergency();
+  }
+  LbMotion.stopAndWait();
+}
+
+void pivotTurnDeg(int deg, int dir, int speed) {
+  if (emergencyFlag || deg <= 0) return;
+  int spd = speed > 0 ? toMotorSpeed(speed) : (currentSpeed > 0 ? currentSpeed : 1000);
+  if (dir > 0) {
+    LbMotion.runLR(+spd, 0);
+  } else {
+    LbMotion.runLR(0, +spd);
   }
   int remaining = deg;
   while (remaining > 0 && !emergencyFlag) {
@@ -280,7 +363,7 @@ void scanObject(int dir, int maxDistCm, int maxDeg) {
   }
 }
 
-void approachObject(int targetCm) {
+void approachObject(int targetCm, int speed) {
   if (emergencyFlag) return;
   if (targetCm <= 0) targetCm = defaultDekati;
 
@@ -291,7 +374,7 @@ void approachObject(int targetCm) {
     return;
   }
 
-  int spd = 600;
+  int spd = speed > 0 ? toMotorSpeed(speed) : 600;
   LbMotion.runLR(+spd, +spd);
 
   int stepMm = 10;
@@ -328,7 +411,7 @@ void approachObject(int targetCm) {
   Serial.println(Leanbot.pingCm());
 }
 
-void retreatObject(int targetCm) {
+void retreatObject(int targetCm, int speed) {
   if (emergencyFlag) return;
   if (targetCm <= 0) targetCm = defaultJauhi;
 
@@ -339,7 +422,7 @@ void retreatObject(int targetCm) {
     return;
   }
 
-  int spd = 600;
+  int spd = speed > 0 ? toMotorSpeed(speed) : 600;
   LbMotion.runLR(-spd, -spd);
 
   int stepMm = 10;
@@ -376,16 +459,16 @@ void retreatObject(int targetCm) {
   Serial.println(Leanbot.pingCm());
 }
 
-void moveToLine(int dir, int maxDistCm) {
+void moveToLine(int dir, int maxDistCm, int speed) {
   if (emergencyFlag) return;
-  int spd = 500;
+  int spd = speed > 0 ? toMotorSpeed(speed) : 500;
   int maxMm = maxDistCm > 0 ? maxDistCm * 10 : 500;
   int stepMm = 2;
   int traveledMm = 0;
   bool found = false;
 
   int initialLine = LbIRLine.read();
-  if ((initialLine & 0b1111) == 0b0110) {
+  if (isLineDetected(initialLine)) {
     LbRGB.fillColor(CRGB::Green);
     LbRGB.show();
     playBunyi(1);
@@ -403,7 +486,7 @@ void moveToLine(int dir, int maxDistCm) {
     int line = LbIRLine.read();
     LbIRLine.displayOnRGB(line, CRGB::Blue);
 
-    if ((line & 0b1111) == 0b0110) {
+    if (isLineDetected(line)) {
       found = true;
       break;
     }
@@ -424,7 +507,7 @@ void moveToLine(int dir, int maxDistCm) {
   }
 }
 
-void followLineUntilIntersection(int targetIntersections) {
+void followLineUntilIntersection(int targetIntersections, int speed) {
   if (emergencyFlag) return;
   if (targetIntersections <= 0) {
     LbMotion.runLR(0, 0);
@@ -432,9 +515,9 @@ void followLineUntilIntersection(int targetIntersections) {
     return;
   }
 
-  int spd = currentSpeed > 0 ? currentSpeed : 1000;
-  if (spd < 400) spd = 400;
-  if (spd > 1200) spd = 1200;
+  int spd = speed > 0 ? toMotorSpeed(speed) : (currentSpeed > 0 ? currentSpeed : 1000);
+  if (spd < 350) spd = 350;
+  if (spd > 1500) spd = 1500;
 
   int intersectionsCount = 0;
   unsigned long lastSeenLine = millis();
@@ -616,15 +699,31 @@ bool parseInstruction(char* str, Instruction& inst) {
   if (strcasecmp_P(cmd, PSTR("MAJU")) == 0) {
     inst.opcode = OP_MAJU;
     inst.p1 = defaultMaju;
+    inst.p2 = defaultMajuSpeed;
   } else if (strcasecmp_P(cmd, PSTR("MUNDUR")) == 0) {
     inst.opcode = OP_MUNDUR;
     inst.p1 = defaultMundur;
-  } else if (strcasecmp_P(cmd, PSTR("KANAN")) == 0) {
+    inst.p2 = defaultMundurSpeed;
+  } else if (strcasecmp_P(cmd, PSTR("KANAN")) == 0 || strcasecmp_P(cmd, PSTR("ROTATE_KANAN")) == 0) {
     inst.opcode = OP_KANAN;
     inst.p1 = defaultKanan;
-  } else if (strcasecmp_P(cmd, PSTR("KIRI")) == 0) {
+    inst.p2 = defaultKananSpeed;
+  } else if (strcasecmp_P(cmd, PSTR("KIRI")) == 0 || strcasecmp_P(cmd, PSTR("ROTATE_KIRI")) == 0) {
     inst.opcode = OP_KIRI;
     inst.p1 = defaultKiri;
+    inst.p2 = defaultKiriSpeed;
+  } else if (strcasecmp_P(cmd, PSTR("BELOK_KANAN")) == 0 || strcasecmp_P(cmd, PSTR("PIVOT_KANAN")) == 0) {
+    inst.opcode = OP_BELOK_KANAN;
+    inst.p1 = defaultBelokKanan;
+    inst.p2 = defaultBelokKananSpeed;
+  } else if (strcasecmp_P(cmd, PSTR("BELOK_KIRI")) == 0 || strcasecmp_P(cmd, PSTR("PIVOT_KIRI")) == 0) {
+    inst.opcode = OP_BELOK_KIRI;
+    inst.p1 = defaultBelokKiri;
+    inst.p2 = defaultBelokKiriSpeed;
+  } else if (strcasecmp_P(cmd, PSTR("BELOK")) == 0) {
+    inst.opcode = OP_BELOK_KANAN;
+    inst.p1 = defaultBelokKanan;
+    inst.p2 = defaultBelokKananSpeed;
   } else if (strcasecmp_P(cmd, PSTR("STOP")) == 0) {
     inst.opcode = OP_STOP;
   } else if (strcasecmp_P(cmd, PSTR("SPEED")) == 0) {
@@ -646,9 +745,11 @@ bool parseInstruction(char* str, Instruction& inst) {
   } else if (strcasecmp_P(cmd, PSTR("DEKATI_OBJEK")) == 0) {
     inst.opcode = OP_DEKATI_OBJEK;
     inst.p1 = defaultDekati;
+    inst.p2 = defaultDekatiSpeed;
   } else if (strcasecmp_P(cmd, PSTR("JAUHI_OBJEK")) == 0) {
     inst.opcode = OP_JAUHI_OBJEK;
     inst.p1 = defaultJauhi;
+    inst.p2 = defaultJauhiSpeed;
   } else if (strcasecmp_P(cmd, PSTR("CEK_OBJEK")) == 0) {
     inst.opcode = OP_CEK_OBJEK;
     inst.p1 = defaultCek;
@@ -688,12 +789,15 @@ bool parseInstruction(char* str, Instruction& inst) {
   } else if (strcasecmp_P(cmd, PSTR("FOLLOW_LINE")) == 0) {
     inst.opcode = OP_FOLLOW_LINE;
     inst.p1 = defaultFollowLine;
+    inst.p2 = defaultFollowLineSpeed;
   } else if (strcasecmp_P(cmd, PSTR("MAJU_LINE")) == 0) {
     inst.opcode = OP_MAJU_LINE;
     inst.p1 = defaultMajuLine;
+    inst.p2 = defaultMajuLineSpeed;
   } else if (strcasecmp_P(cmd, PSTR("MUNDUR_LINE")) == 0) {
     inst.opcode = OP_MUNDUR_LINE;
     inst.p1 = defaultMundurLine;
+    inst.p2 = defaultMundurLineSpeed;
   } else if (strcasecmp_P(cmd, PSTR("STOP_LINE")) == 0) {
     inst.opcode = OP_STOP_LINE;
   } else if (strcasecmp_P(cmd, PSTR("KALIBRASI")) == 0 || strcasecmp_P(cmd, PSTR("CALIBRATE")) == 0 || strcasecmp_P(cmd, PSTR("CALIBRASI_LINE")) == 0) {
@@ -707,6 +811,19 @@ bool parseInstruction(char* str, Instruction& inst) {
   }
 
   if (params != NULL && strlen(params) > 0) {
+    if (strcasecmp_P(cmd, PSTR("BELOK")) == 0) {
+      if (strncasecmp_P(params, PSTR("KANAN"), 5) == 0) {
+        inst.opcode = OP_BELOK_KANAN;
+        params += 5;
+        if (*params == ',') params++;
+      } else if (strncasecmp_P(params, PSTR("KIRI"), 4) == 0) {
+        inst.opcode = OP_BELOK_KIRI;
+        params += 4;
+        if (*params == ',') params++;
+      }
+      while (*params == ' ' || *params == '\t') params++;
+    }
+
     if (inst.opcode == OP_LED) {
       if (strcasecmp_P(params, PSTR("ON")) == 0 || strcmp_P(params, PSTR("1")) == 0) {
         inst.p1 = 1;
@@ -727,12 +844,20 @@ bool parseInstruction(char* str, Instruction& inst) {
     } else if (inst.opcode == OP_LED_WARNA) {
       inst.p1 = parseColorIndex(params);
     } else if (inst.opcode == OP_FOLLOW_LINE) {
-      if (strcasecmp_P(params, PSTR("OFF")) == 0 || strcmp_P(params, PSTR("0")) == 0) {
-        inst.p1 = 0;
-      } else if (strcasecmp_P(params, PSTR("ON")) == 0) {
-        inst.p1 = 9999;
+      char* comma = strchr(params, ',');
+      if (comma != NULL) {
+        *comma = '\0';
+        char* p1Str = params;
+        char* p2Str = comma + 1;
+        while (*p2Str == ' ' || *p2Str == '\t') p2Str++;
+        if (strcasecmp_P(p1Str, PSTR("OFF")) == 0 || strcmp_P(p1Str, PSTR("0")) == 0) inst.p1 = 0;
+        else if (strcasecmp_P(p1Str, PSTR("ON")) == 0) inst.p1 = 9999;
+        else inst.p1 = atoi(p1Str);
+        inst.p2 = atoi(p2Str);
       } else {
-        inst.p1 = atoi(params);
+        if (strcasecmp_P(params, PSTR("OFF")) == 0 || strcmp_P(params, PSTR("0")) == 0) inst.p1 = 0;
+        else if (strcasecmp_P(params, PSTR("ON")) == 0) inst.p1 = 9999;
+        else inst.p1 = atoi(params);
       }
     } else if (inst.opcode == OP_CONFIG) {
       char* comma = strchr(params, ',');
@@ -742,23 +867,36 @@ bool parseInstruction(char* str, Instruction& inst) {
         char* val = comma + 1;
         while (*val == ' ' || *val == '\t') val++;
         int16_t numVal = atoi(val);
-        if (strcasecmp_P(key, PSTR("MAJU")) == 0) { inst.p1 = OP_MAJU; inst.p2 = numVal; }
-        else if (strcasecmp_P(key, PSTR("MUNDUR")) == 0) { inst.p1 = OP_MUNDUR; inst.p2 = numVal; }
-        else if (strcasecmp_P(key, PSTR("KANAN")) == 0) { inst.p1 = OP_KANAN; inst.p2 = numVal; }
-        else if (strcasecmp_P(key, PSTR("KIRI")) == 0) { inst.p1 = OP_KIRI; inst.p2 = numVal; }
-        else if (strcasecmp_P(key, PSTR("SPEED")) == 0) { inst.p1 = OP_SPEED; inst.p2 = numVal; }
-        else if (strcasecmp_P(key, PSTR("TUNGGU")) == 0) { inst.p1 = OP_TUNGGU; inst.p2 = numVal; }
-        else if (strcasecmp_P(key, PSTR("BATAS_SCAN")) == 0 || strcasecmp_P(key, PSTR("SCAN_SUDUT")) == 0) { inst.p1 = OP_BATAS_SCAN; inst.p2 = numVal; }
-        else if (strcasecmp_P(key, PSTR("SCAN_JARAK")) == 0 || strcasecmp_P(key, PSTR("SCAN")) == 0) { inst.p1 = OP_SCAN_KANAN; inst.p2 = numVal; }
-        else if (strcasecmp_P(key, PSTR("DEKATI")) == 0 || strcasecmp_P(key, PSTR("DEKATI_OBJEK")) == 0) { inst.p1 = OP_DEKATI_OBJEK; inst.p2 = numVal; }
-        else if (strcasecmp_P(key, PSTR("JAUHI")) == 0 || strcasecmp_P(key, PSTR("JAUHI_OBJEK")) == 0) { inst.p1 = OP_JAUHI_OBJEK; inst.p2 = numVal; }
-        else if (strcasecmp_P(key, PSTR("CEK")) == 0 || strcasecmp_P(key, PSTR("CEK_OBJEK")) == 0) { inst.p1 = OP_CEK_OBJEK; inst.p2 = numVal; }
-        else if (strcasecmp_P(key, PSTR("BUNYI")) == 0) { inst.p1 = OP_BUNYI; inst.p2 = numVal; }
-        else if (strcasecmp_P(key, PSTR("BEEP")) == 0) { inst.p1 = OP_BEEP; inst.p2 = numVal; }
-        else if (strcasecmp_P(key, PSTR("SERVO")) == 0) { inst.p1 = OP_SERVO; inst.p2 = numVal; }
-        else if (strcasecmp_P(key, PSTR("FOLLOW_LINE")) == 0 || strcasecmp_P(key, PSTR("LINE_FOLLOWER")) == 0) { inst.p1 = OP_FOLLOW_LINE; inst.p2 = numVal; }
-        else if (strcasecmp_P(key, PSTR("MAJU_LINE")) == 0) { inst.p1 = OP_MAJU_LINE; inst.p2 = numVal; }
-        else if (strcasecmp_P(key, PSTR("MUNDUR_LINE")) == 0) { inst.p1 = OP_MUNDUR_LINE; inst.p2 = numVal; }
+        if (strcasecmp_P(key, PSTR("MAJU")) == 0) { inst.p1 = CFG_MAJU; inst.p2 = numVal; }
+        else if (strcasecmp_P(key, PSTR("MAJU_SPEED")) == 0) { inst.p1 = CFG_MAJU_SPEED; inst.p2 = numVal; }
+        else if (strcasecmp_P(key, PSTR("MUNDUR")) == 0) { inst.p1 = CFG_MUNDUR; inst.p2 = numVal; }
+        else if (strcasecmp_P(key, PSTR("MUNDUR_SPEED")) == 0) { inst.p1 = CFG_MUNDUR_SPEED; inst.p2 = numVal; }
+        else if (strcasecmp_P(key, PSTR("KANAN")) == 0) { inst.p1 = CFG_KANAN; inst.p2 = numVal; }
+        else if (strcasecmp_P(key, PSTR("KANAN_SPEED")) == 0) { inst.p1 = CFG_KANAN_SPEED; inst.p2 = numVal; }
+        else if (strcasecmp_P(key, PSTR("KIRI")) == 0) { inst.p1 = CFG_KIRI; inst.p2 = numVal; }
+        else if (strcasecmp_P(key, PSTR("KIRI_SPEED")) == 0) { inst.p1 = CFG_KIRI_SPEED; inst.p2 = numVal; }
+        else if (strcasecmp_P(key, PSTR("BELOK_KANAN")) == 0) { inst.p1 = CFG_BELOK_KANAN; inst.p2 = numVal; }
+        else if (strcasecmp_P(key, PSTR("BELOK_KANAN_SPEED")) == 0) { inst.p1 = CFG_BELOK_KANAN_SPEED; inst.p2 = numVal; }
+        else if (strcasecmp_P(key, PSTR("BELOK_KIRI")) == 0) { inst.p1 = CFG_BELOK_KIRI; inst.p2 = numVal; }
+        else if (strcasecmp_P(key, PSTR("BELOK_KIRI_SPEED")) == 0) { inst.p1 = CFG_BELOK_KIRI_SPEED; inst.p2 = numVal; }
+        else if (strcasecmp_P(key, PSTR("SPEED")) == 0) { inst.p1 = CFG_SPEED; inst.p2 = numVal; }
+        else if (strcasecmp_P(key, PSTR("TUNGGU")) == 0) { inst.p1 = CFG_TUNGGU; inst.p2 = numVal; }
+        else if (strcasecmp_P(key, PSTR("BATAS_SCAN")) == 0 || strcasecmp_P(key, PSTR("SCAN_SUDUT")) == 0) { inst.p1 = CFG_BATAS_SCAN; inst.p2 = numVal; }
+        else if (strcasecmp_P(key, PSTR("SCAN_JARAK")) == 0 || strcasecmp_P(key, PSTR("SCAN")) == 0) { inst.p1 = CFG_SCAN_JARAK; inst.p2 = numVal; }
+        else if (strcasecmp_P(key, PSTR("DEKATI")) == 0 || strcasecmp_P(key, PSTR("DEKATI_OBJEK")) == 0) { inst.p1 = CFG_DEKATI; inst.p2 = numVal; }
+        else if (strcasecmp_P(key, PSTR("DEKATI_SPEED")) == 0) { inst.p1 = CFG_DEKATI_SPEED; inst.p2 = numVal; }
+        else if (strcasecmp_P(key, PSTR("JAUHI")) == 0 || strcasecmp_P(key, PSTR("JAUHI_OBJEK")) == 0) { inst.p1 = CFG_JAUHI; inst.p2 = numVal; }
+        else if (strcasecmp_P(key, PSTR("JAUHI_SPEED")) == 0) { inst.p1 = CFG_JAUHI_SPEED; inst.p2 = numVal; }
+        else if (strcasecmp_P(key, PSTR("CEK")) == 0 || strcasecmp_P(key, PSTR("CEK_OBJEK")) == 0) { inst.p1 = CFG_CEK; inst.p2 = numVal; }
+        else if (strcasecmp_P(key, PSTR("BUNYI")) == 0) { inst.p1 = CFG_BUNYI; inst.p2 = numVal; }
+        else if (strcasecmp_P(key, PSTR("BEEP")) == 0) { inst.p1 = CFG_BEEP; inst.p2 = numVal; }
+        else if (strcasecmp_P(key, PSTR("SERVO")) == 0) { inst.p1 = CFG_SERVO; inst.p2 = numVal; }
+        else if (strcasecmp_P(key, PSTR("FOLLOW_LINE")) == 0 || strcasecmp_P(key, PSTR("LINE_FOLLOWER")) == 0) { inst.p1 = CFG_FOLLOW_LINE; inst.p2 = numVal; }
+        else if (strcasecmp_P(key, PSTR("FOLLOW_LINE_SPEED")) == 0) { inst.p1 = CFG_FOLLOW_LINE_SPEED; inst.p2 = numVal; }
+        else if (strcasecmp_P(key, PSTR("MAJU_LINE")) == 0) { inst.p1 = CFG_MAJU_LINE; inst.p2 = numVal; }
+        else if (strcasecmp_P(key, PSTR("MAJU_LINE_SPEED")) == 0) { inst.p1 = CFG_MAJU_LINE_SPEED; inst.p2 = numVal; }
+        else if (strcasecmp_P(key, PSTR("MUNDUR_LINE")) == 0) { inst.p1 = CFG_MUNDUR_LINE; inst.p2 = numVal; }
+        else if (strcasecmp_P(key, PSTR("MUNDUR_LINE_SPEED")) == 0) { inst.p1 = CFG_MUNDUR_LINE_SPEED; inst.p2 = numVal; }
       }
     } else {
       char* comma = strchr(params, ',');
@@ -783,19 +921,27 @@ void executeInstruction(const Instruction& inst) {
 
   switch (inst.opcode) {
     case OP_MAJU:
-      moveMm(inst.p1 * 10, +1);
+      moveMm(inst.p1 * 10, +1, inst.p2);
       break;
 
     case OP_MUNDUR:
-      moveMm(inst.p1 * 10, -1);
+      moveMm(inst.p1 * 10, -1, inst.p2);
       break;
 
     case OP_KANAN:
-      rotateDeg(inst.p1, +1);
+      rotateDeg(inst.p1, +1, inst.p2);
       break;
 
     case OP_KIRI:
-      rotateDeg(inst.p1, -1);
+      rotateDeg(inst.p1, -1, inst.p2);
+      break;
+
+    case OP_BELOK_KANAN:
+      pivotTurnDeg(inst.p1, +1, inst.p2);
+      break;
+
+    case OP_BELOK_KIRI:
+      pivotTurnDeg(inst.p1, -1, inst.p2);
       break;
 
     case OP_STOP:
@@ -837,11 +983,11 @@ void executeInstruction(const Instruction& inst) {
       break;
 
     case OP_DEKATI_OBJEK:
-      approachObject(inst.p1);
+      approachObject(inst.p1, inst.p2);
       break;
 
     case OP_JAUHI_OBJEK:
-      retreatObject(inst.p1);
+      retreatObject(inst.p1, inst.p2);
       break;
 
     case OP_CEK_OBJEK: {
@@ -938,7 +1084,7 @@ void executeInstruction(const Instruction& inst) {
 
     case OP_FOLLOW_LINE:
       if (inst.p1 > 0) {
-        followLineUntilIntersection(inst.p1);
+        followLineUntilIntersection(inst.p1, inst.p2);
       } else {
         LbMotion.runLR(0, 0);
         LbMotion.stopAndWait();
@@ -946,11 +1092,11 @@ void executeInstruction(const Instruction& inst) {
       break;
 
     case OP_MAJU_LINE:
-      moveToLine(+1, inst.p1);
+      moveToLine(+1, inst.p1, inst.p2);
       break;
 
     case OP_MUNDUR_LINE:
-      moveToLine(-1, inst.p1);
+      moveToLine(-1, inst.p1, inst.p2);
       break;
 
     case OP_KALIBRASI:
@@ -968,36 +1114,46 @@ void executeInstruction(const Instruction& inst) {
     case OP_CONFIG: {
       int16_t val = inst.p2;
       switch (inst.p1) {
-        case OP_MAJU: if (val > 0) defaultMaju = val; break;
-        case OP_MUNDUR: if (val > 0) defaultMundur = val; break;
-        case OP_KANAN: if (val > 0) defaultKanan = val; break;
-        case OP_KIRI: if (val > 0) defaultKiri = val; break;
-        case OP_SPEED:
+        case CFG_MAJU: if (val > 0) defaultMaju = val; break;
+        case CFG_MAJU_SPEED: if (val > 0) defaultMajuSpeed = val; break;
+        case CFG_MUNDUR: if (val > 0) defaultMundur = val; break;
+        case CFG_MUNDUR_SPEED: if (val > 0) defaultMundurSpeed = val; break;
+        case CFG_KANAN: if (val > 0) defaultKanan = val; break;
+        case CFG_KANAN_SPEED: if (val > 0) defaultKananSpeed = val; break;
+        case CFG_KIRI: if (val > 0) defaultKiri = val; break;
+        case CFG_KIRI_SPEED: if (val > 0) defaultKiriSpeed = val; break;
+        case CFG_BELOK_KANAN: if (val > 0) defaultBelokKanan = val; break;
+        case CFG_BELOK_KANAN_SPEED: if (val > 0) defaultBelokKananSpeed = val; break;
+        case CFG_BELOK_KIRI: if (val > 0) defaultBelokKiri = val; break;
+        case CFG_BELOK_KIRI_SPEED: if (val > 0) defaultBelokKiriSpeed = val; break;
+        case CFG_SPEED:
           if (val > 0) {
             defaultSpeed = val;
-            if (val <= 10) currentSpeed = map(val, 1, 10, 400, 2000);
-            else if (val <= 255) currentSpeed = map(val, 0, 255, 350, 2000);
-            else currentSpeed = constrain(val, 350, 2000);
+            currentSpeed = toMotorSpeed(val);
           }
           break;
-        case OP_BATAS_SCAN:
+        case CFG_BATAS_SCAN:
           if (val > 0) {
             defaultScanAngle = val;
             scanMaxAngle = val;
           }
           break;
-        case OP_TUNGGU: if (val > 0) defaultTunggu = val; break;
-        case OP_SCAN_KANAN:
-        case OP_SCAN_KIRI: if (val > 0) defaultScanDist = val; break;
-        case OP_DEKATI_OBJEK: if (val > 0) defaultDekati = val; break;
-        case OP_JAUHI_OBJEK: if (val > 0) defaultJauhi = val; break;
-        case OP_CEK_OBJEK: if (val > 0) defaultCek = val; break;
-        case OP_BUNYI: if (val > 0) defaultBunyi = val; break;
-        case OP_BEEP: if (val > 0) defaultBeepFreq = val; break;
-        case OP_SERVO: if (val >= 0) defaultServo = val; break;
-        case OP_FOLLOW_LINE: if (val >= 0) defaultFollowLine = val; break;
-        case OP_MAJU_LINE: if (val > 0) defaultMajuLine = val; break;
-        case OP_MUNDUR_LINE: if (val > 0) defaultMundurLine = val; break;
+        case CFG_TUNGGU: if (val > 0) defaultTunggu = val; break;
+        case CFG_SCAN_JARAK: if (val > 0) defaultScanDist = val; break;
+        case CFG_DEKATI: if (val > 0) defaultDekati = val; break;
+        case CFG_DEKATI_SPEED: if (val > 0) defaultDekatiSpeed = val; break;
+        case CFG_JAUHI: if (val > 0) defaultJauhi = val; break;
+        case CFG_JAUHI_SPEED: if (val > 0) defaultJauhiSpeed = val; break;
+        case CFG_CEK: if (val > 0) defaultCek = val; break;
+        case CFG_BUNYI: if (val > 0) defaultBunyi = val; break;
+        case CFG_BEEP: if (val > 0) defaultBeepFreq = val; break;
+        case CFG_SERVO: if (val >= 0) defaultServo = val; break;
+        case CFG_FOLLOW_LINE: if (val >= 0) defaultFollowLine = val; break;
+        case CFG_FOLLOW_LINE_SPEED: if (val > 0) defaultFollowLineSpeed = val; break;
+        case CFG_MAJU_LINE: if (val > 0) defaultMajuLine = val; break;
+        case CFG_MAJU_LINE_SPEED: if (val > 0) defaultMajuLineSpeed = val; break;
+        case CFG_MUNDUR_LINE: if (val > 0) defaultMundurLine = val; break;
+        case CFG_MUNDUR_LINE_SPEED: if (val > 0) defaultMundurLineSpeed = val; break;
       }
       break;
     }
