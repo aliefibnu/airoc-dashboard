@@ -217,7 +217,6 @@ void setup() {
   LbRGB.fillColor(CRGB::Black);
   LbRGB.show();
   Leanbot.tone(1500, 100);
-  while (Serial.available() > 0) Serial.read();
   inPacket = false;
   tokenLen = 0;
   prefixLen = 0;
@@ -278,8 +277,6 @@ bool checkEmergency() {
 }
 
 void loop() {
-  if (checkEmergency()) return;
-
   while (Serial.available() > 0) {
     char c = Serial.read();
     lastRxTime = millis();
