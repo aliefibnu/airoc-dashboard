@@ -417,8 +417,10 @@ async function runProdMission() {
 
   try {
     statusMessage.value = "Mereset variabel batch di robot...";
+    const clearPromise = BleService.waitForAcknowledgment("[BATCHES_CLEARED]", 2000);
     await sendRawBle("CLEAR");
-    await new Promise((r) => setTimeout(r, 120));
+    await clearPromise;
+    await new Promise((r) => setTimeout(r, 60));
 
     for (const pb of preparedBatches) {
       if (abortBatchExecution) {
@@ -427,15 +429,16 @@ async function runProdMission() {
       }
 
       statusMessage.value = `Mengunggah Batch ${pb.batchNum} (${pb.count} instruksi) ke robot...`;
-      await sendRawBle(pb.command);
-
-      const ack = await BleService.waitForAcknowledgment(
+      const ackPromise = BleService.waitForAcknowledgment(
         `[BATCH_LOADED:${pb.batchNum}`,
         5000,
       );
+      await sendRawBle(pb.command);
+      const ack = await ackPromise;
       if (!ack.success) {
-        await new Promise((r) => setTimeout(r, 150));
+        throw new Error(`Robot tidak mengonfirmasi Batch ${pb.batchNum}: ${ack.reason || "Timeout"}`);
       }
+      await new Promise((r) => setTimeout(r, 60));
     }
 
     if (abortBatchExecution) {
@@ -444,11 +447,12 @@ async function runProdMission() {
     }
 
     statusMessage.value = `Semua ${preparedBatches.length} batch berhasil diterima robot! Memulai eksekusi...`;
+    const resPromise = BleService.waitForBatchCompletion(300000);
     await sendRawBle("START_MISSION");
 
     statusMessage.value =
       "Robot sedang menjalankan seluruh misi dari Batch 1...";
-    const res = await BleService.waitForBatchCompletion(300000);
+    const res = await resPromise;
 
     if (res.success) {
       statusMessage.value =

@@ -200,9 +200,13 @@ class BleService {
     }
     const trimmed = commandStr.trim();
     let rawCmd = trimmed;
+    const upper = trimmed.toUpperCase();
     if (
-      !trimmed.toUpperCase().startsWith("CODE;") &&
-      !trimmed.toUpperCase().startsWith("EMERGENCY")
+      !upper.startsWith("CODE;") &&
+      !upper.startsWith("BATCH:") &&
+      !upper.startsWith("CLEAR") &&
+      !upper.startsWith("START") &&
+      !upper.startsWith("EMERGENCY")
     ) {
       rawCmd = `CODE;${trimmed}`;
     }
@@ -278,8 +282,7 @@ class BleService {
         accumulated += str;
         if (
           accumulated.includes("[MISSION_DONE]") ||
-          accumulated.includes("BATCH_READY") ||
-          accumulated.includes("[STATE] READY")
+          accumulated.includes("BATCH_READY")
         ) {
           finish({ success: true, text: accumulated });
         } else if (

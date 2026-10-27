@@ -176,6 +176,19 @@ void clearAllBatches() {
 bool enqueueBatchToken(uint8_t bIdx) {
   if (tokenLen == 0) return false;
   tokenBuf[tokenLen] = '\0';
+  if (strncasecmp_P(tokenBuf, PSTR("BATCH:"), 6) == 0) {
+    int bNum = atoi(tokenBuf + 6);
+    if (bNum >= 1 && bNum <= MAX_BATCHES) {
+      currentBatchIdx = bNum - 1;
+      batchQueue[currentBatchIdx].count = 0;
+      isLegacyCode = false;
+      Serial.print(F("[RECV] BATCH:"));
+      Serial.println(currentBatchIdx + 1);
+    }
+    tokenLen = 0;
+    tokenBuf[0] = '\0';
+    return true;
+  }
   Instruction inst;
   bool ok = parseInstruction(tokenBuf, inst);
   if (ok && inst.opcode != OP_NONE) {
@@ -266,6 +279,10 @@ void loop() {
     lastRxTime = millis();
 
     if (!inPacket) {
+      if (prefixLen == 0 && (c == '\r' || c == '\n' || c == ' ' || c == '\t')) {
+        continue;
+      }
+
       if (prefixLen < sizeof(prefixBuf) - 1) {
         prefixBuf[prefixLen++] = c;
         prefixBuf[prefixLen] = '\0';
