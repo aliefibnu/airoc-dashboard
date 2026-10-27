@@ -96,8 +96,7 @@
             @click="runProdMission"
             class="bg-green-500 text-black font-black uppercase text-base md:text-lg py-3.5 px-6 rounded-xl border-4 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:bg-green-400 active:translate-y-1 active:shadow-none transition-all cursor-pointer flex items-center gap-2"
           >
-            <span>🚀</span>
-            <h3>JALANKAN MISI (CODE)</h3>
+            <h3>JALANKAN MISI</h3>
           </button>
 
           <button
@@ -259,14 +258,23 @@ function parseInstructionBatches(rawStr, batchSize = 12) {
   const tokens = cleaned
     .split(";")
     .map((t) => t.trim())
-    .filter((t) => t.length > 0 && t.toUpperCase() !== "CODE" && t.toUpperCase() !== "PROD");
+    .filter(
+      (t) =>
+        t.length > 0 &&
+        t.toUpperCase() !== "CODE" &&
+        t.toUpperCase() !== "PROD",
+    );
 
   if (tokens.length === 0) return [];
 
   const batches = [];
   for (let i = 0; i < tokens.length; i += batchSize) {
     const chunk = tokens.slice(i, i + batchSize);
-    if (!chunk.some((c) => c.toUpperCase() === "END" || c.toUpperCase() === "STOP")) {
+    if (
+      !chunk.some(
+        (c) => c.toUpperCase() === "END" || c.toUpperCase() === "STOP",
+      )
+    ) {
       chunk.push("END");
     }
     batches.push(`CODE;${chunk.join(";")}`);
@@ -301,9 +309,10 @@ async function runProdMission() {
         break;
       }
 
-      statusMessage.value = batches.length > 1
-        ? `Mengirim Batch ${i + 1}/${batches.length}...`
-        : "Mengirim instruksi misi...";
+      statusMessage.value =
+        batches.length > 1
+          ? `Mengirim Batch ${i + 1}/${batches.length}...`
+          : "Mengirim instruksi misi...";
 
       await sendRawBle(batches[i]);
 
@@ -314,9 +323,10 @@ async function runProdMission() {
     }
 
     if (!abortBatchExecution) {
-      statusMessage.value = batches.length > 1
-        ? `Semua ${batches.length} batch misi berhasil dikirim dan selesai!`
-        : "Instruksi misi berhasil dikirim ke robot!";
+      statusMessage.value =
+        batches.length > 1
+          ? `Semua ${batches.length} batch misi berhasil dikirim dan selesai!`
+          : "Instruksi misi berhasil dikirim ke robot!";
     }
   } catch (err) {
     statusMessage.value = `Gagal menjalankan misi: ${err.message || err}`;

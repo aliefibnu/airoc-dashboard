@@ -118,7 +118,7 @@ export const INSTRUCTION_ALIASES = [
   {
     name: "BELOK_KIRI",
     alias: "BELOK_KIRI",
-    label: "BELOK KIRI (PIVOT)",
+    label: "BELOK KIRI",
     description: "Belok Kiri Poros Ban Kiri",
     category: "1. GERAKAN DASAR",
     categoryId: "gerakan",
@@ -145,7 +145,7 @@ export const INSTRUCTION_ALIASES = [
   {
     name: "BELOK_KANAN",
     alias: "BELOK_KANAN",
-    label: "BELOK KANAN (PIVOT)",
+    label: "BELOK KANAN",
     description: "Belok Kanan Poros Ban Kanan",
     category: "1. GERAKAN DASAR",
     categoryId: "gerakan",
@@ -182,7 +182,7 @@ export const INSTRUCTION_ALIASES = [
   {
     name: "SPEED",
     alias: "SPEED",
-    label: "KECEPATAN (SPEED)",
+    label: "KECEPATAN",
     description: "Mengatur Kecepatan Global Motor Stepper",
     category: "1. GERAKAN DASAR",
     categoryId: "gerakan",
@@ -202,7 +202,7 @@ export const INSTRUCTION_ALIASES = [
   {
     name: "TUNGGU",
     alias: "TUNGGU",
-    label: "TUNGGU (DELAY)",
+    label: "TUNGGU",
     description: "Menunda Eksekusi Berikutnya",
     category: "1. GERAKAN DASAR",
     categoryId: "gerakan",
@@ -221,7 +221,7 @@ export const INSTRUCTION_ALIASES = [
   {
     name: "CAPIT",
     alias: "CAPIT",
-    label: "CAPIT (TUTUP)",
+    label: "CAPIT",
     description: "Menutup Servo Gripper Untuk Mencapit Objek",
     category: "2. GRIPPER & MANIPULASI",
     categoryId: "gripper",
@@ -231,7 +231,7 @@ export const INSTRUCTION_ALIASES = [
   {
     name: "LEPAS",
     alias: "LEPAS",
-    label: "LEPAS (BUKA)",
+    label: "LEPAS",
     description: "Membuka Servo Gripper Untuk Melepaskan Objek",
     category: "2. GRIPPER & MANIPULASI",
     categoryId: "gripper",
