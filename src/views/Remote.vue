@@ -84,15 +84,6 @@
     >
       <div class="space-y-3">
         <div class="flex flex-wrap items-center justify-between gap-2">
-          <div class="flex items-center gap-2">
-            <span class="font-black text-sm md:text-base uppercase tracking-wider">
-              PILIH BATCH MISI (1 - 10)
-            </span>
-            <span class="text-xs font-mono font-bold bg-white px-2 py-0.5 rounded border-2 border-black">
-              AKTIF: BATCH {{ activeBatchIndex + 1 }}
-            </span>
-          </div>
-
           <button
             type="button"
             @click="clearAllBatches"
@@ -120,7 +111,9 @@
             <span class="text-xs uppercase tracking-tight">B{{ bNum }}</span>
             <span
               class="text-[10px] font-mono font-bold"
-              :class="getBatchCount(bNum - 1) >= 12 ? 'text-red-600 font-black' : ''"
+              :class="
+                getBatchCount(bNum - 1) >= 12 ? 'text-red-600 font-black' : ''
+              "
             >
               {{ getBatchCount(bNum - 1) }}/12
             </span>
@@ -130,9 +123,6 @@
 
       <div class="space-y-2">
         <div class="flex items-center justify-between">
-          <span class="font-black text-xs md:text-sm uppercase text-gray-700">
-            KUMPULAN KODE BATCH {{ activeBatchIndex + 1 }} (MAKSIMAL 12 KODE PER BATCH)
-          </span>
           <button
             v-if="currentBatchString.length > 0"
             type="button"
@@ -354,7 +344,8 @@ function resolveInstructionToken(token) {
   }
 
   const action = INSTRUCTION_ALIASES.find(
-    (item) => item.alias.toUpperCase() === cmd || item.name.toUpperCase() === cmd,
+    (item) =>
+      item.alias.toUpperCase() === cmd || item.name.toUpperCase() === cmd,
   );
   if (action && Array.isArray(action.params) && action.params.length > 0) {
     const defaultVals = action.params
@@ -417,7 +408,8 @@ async function runProdMission() {
   }
 
   if (preparedBatches.length === 0) {
-    statusMessage.value = "Semua batch kosong! Silakan tambahkan instruksi terlebih dahulu.";
+    statusMessage.value =
+      "Semua batch kosong! Silakan tambahkan instruksi terlebih dahulu.";
     return;
   }
 
@@ -437,7 +429,10 @@ async function runProdMission() {
       statusMessage.value = `Mengunggah Batch ${pb.batchNum} (${pb.count} instruksi) ke robot...`;
       await sendRawBle(pb.command);
 
-      const ack = await BleService.waitForAcknowledgment(`[BATCH_LOADED:${pb.batchNum}`, 5000);
+      const ack = await BleService.waitForAcknowledgment(
+        `[BATCH_LOADED:${pb.batchNum}`,
+        5000,
+      );
       if (!ack.success) {
         await new Promise((r) => setTimeout(r, 150));
       }
@@ -451,11 +446,13 @@ async function runProdMission() {
     statusMessage.value = `Semua ${preparedBatches.length} batch berhasil diterima robot! Memulai eksekusi...`;
     await sendRawBle("START_MISSION");
 
-    statusMessage.value = "Robot sedang menjalankan seluruh misi dari Batch 1...";
+    statusMessage.value =
+      "Robot sedang menjalankan seluruh misi dari Batch 1...";
     const res = await BleService.waitForBatchCompletion(300000);
 
     if (res.success) {
-      statusMessage.value = "Seluruh instruksi misi berhasil diselesaikan oleh robot!";
+      statusMessage.value =
+        "Seluruh instruksi misi berhasil diselesaikan oleh robot!";
     } else {
       statusMessage.value = `Misi berhenti: ${res.reason}`;
     }
@@ -468,7 +465,8 @@ async function emergencyStop() {
   abortBatchExecution = true;
   try {
     await sendRawBle("EMERGENCY_STOP");
-    statusMessage.value = "EMERGENCY STOP DIKIRIM! Robot dihentikan dan semua batch direset.";
+    statusMessage.value =
+      "EMERGENCY STOP DIKIRIM! Robot dihentikan dan semua batch direset.";
   } catch (err) {
     statusMessage.value = `Emergency Stop gagal: ${err.message || err}`;
   }
