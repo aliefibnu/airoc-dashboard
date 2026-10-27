@@ -6,7 +6,7 @@
       <div class="space-y-1">
         <div class="flex items-center gap-3">
           <h1 class="text-2xl md:text-4xl font-black uppercase tracking-tight">
-            PENGATURAN DEFAULT VALUE
+            PENGATURAN DEFAULT VALUE (KRUSIAL)
           </h1>
         </div>
       </div>
@@ -139,7 +139,7 @@
           @click="saveDefaults"
           class="bg-green-500 text-black font-black uppercase text-base md:text-lg py-3.5 px-8 rounded-xl border-4 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:bg-green-400 active:translate-y-1 active:shadow-none transition-all cursor-pointer flex items-center gap-2"
         >
-          <span>SIMPAN</span>
+          <span>SIMPAN & SINKRONKAN</span>
         </button>
       </div>
     </div>
@@ -148,13 +148,27 @@
 
 <script setup>
 import { ref, reactive, computed, onMounted, onUnmounted } from "vue";
-import { RouterLink } from "vue-router";
 import BleService from "@/services/ble.services.js";
 import instructionDefaultsService from "@/services/instruction-defaults.service.js";
 import {
   INSTRUCTION_CATEGORIES,
   INSTRUCTION_ALIASES,
 } from "@/data/instruction-aliases.js";
+
+const CRUCIAL_PARAMS = {
+  SPEED: ["level"],
+  MAJU: ["cm"],
+  MUNDUR: ["cm"],
+  KANAN: ["deg"],
+  KIRI: ["deg"],
+  BELOK_KANAN: ["deg"],
+  BELOK_KIRI: ["deg"],
+  FOLLOW_LINE: ["jumlah_simpangan"],
+  MAJU_LINE: ["max_cm"],
+  MUNDUR_LINE: ["max_cm"],
+  TUNGGU: ["ms"],
+  BEEP: ["frekuensi"],
+};
 
 const isBleConnected = ref(false);
 const connectedDeviceName = ref("");
@@ -163,20 +177,13 @@ const statusMessage = ref("");
 function buildInitialFormData() {
   const currentDefaults = instructionDefaultsService.getAllDefaults();
   const data = {};
-  INSTRUCTION_ALIASES.forEach((item) => {
-    if (Array.isArray(item.params) && item.params.length > 0) {
-      data[item.alias] = {};
-      item.params.forEach((p) => {
-        const val = currentDefaults[item.alias]?.[p.name];
-        data[item.alias][p.name] =
-          val !== undefined
-            ? val
-            : p.defaultValue !== undefined
-              ? p.defaultValue
-              : "";
-      });
-    }
-  });
+  for (const alias in CRUCIAL_PARAMS) {
+    data[alias] = {};
+    CRUCIAL_PARAMS[alias].forEach((paramName) => {
+      const val = currentDefaults[alias]?.[paramName];
+      data[alias][paramName] = val !== undefined ? val : "";
+    });
+  }
   return data;
 }
 
@@ -206,12 +213,15 @@ function checkBle() {
 const paramCategories = computed(() => {
   return INSTRUCTION_CATEGORIES.map((cat) => {
     const items = INSTRUCTION_ALIASES.filter(
-      (item) =>
-        item.categoryId === cat.id &&
-        Array.isArray(item.params) &&
-        item.params.length > 0 &&
-        editForm[item.alias],
-    );
+      (item) => item.categoryId === cat.id && CRUCIAL_PARAMS[item.alias],
+    ).map((item) => {
+      const allowed = CRUCIAL_PARAMS[item.alias] || [];
+      return {
+        ...item,
+        params: item.params.filter((p) => allowed.includes(p.name)),
+      };
+    }).filter((item) => item.params.length > 0);
+
     return {
       id: cat.id,
       title: cat.title,
@@ -222,22 +232,15 @@ const paramCategories = computed(() => {
 
 function initForm() {
   const currentDefaults = instructionDefaultsService.getAllDefaults();
-  INSTRUCTION_ALIASES.forEach((item) => {
-    if (Array.isArray(item.params) && item.params.length > 0) {
-      if (!editForm[item.alias]) {
-        editForm[item.alias] = {};
-      }
-      item.params.forEach((p) => {
-        const val = currentDefaults[item.alias]?.[p.name];
-        editForm[item.alias][p.name] =
-          val !== undefined
-            ? val
-            : p.defaultValue !== undefined
-              ? p.defaultValue
-              : "";
-      });
+  for (const alias in CRUCIAL_PARAMS) {
+    if (!editForm[alias]) {
+      editForm[alias] = {};
     }
-  });
+    CRUCIAL_PARAMS[alias].forEach((paramName) => {
+      const val = currentDefaults[alias]?.[paramName];
+      editForm[alias][paramName] = val !== undefined ? val : "";
+    });
+  }
 }
 
 async function saveDefaults() {
@@ -274,19 +277,5 @@ function resetToStandard() {
       statusMessage.value = "";
     }
   }, 3000);
-}
-
-async function manualSync() {
-  try {
-    statusMessage.value = "Menyinkronkan default value ke Leanbot...";
-    const res = await instructionDefaultsService.syncToLeanbot();
-    if (res.success) {
-      statusMessage.value = "BERHASIL MENYINKRONKAN DEFAULT VALUE KE LEANBOT!";
-    } else {
-      statusMessage.value = `Gagal sync: ${res.reason}`;
-    }
-  } catch (err) {
-    statusMessage.value = `Gagal sync ke Leanbot: ${err.message || err}`;
-  }
 }
 </script>

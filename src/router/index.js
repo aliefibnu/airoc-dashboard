@@ -20,11 +20,6 @@ const router = createRouter({
       component: () => import("../views/Remote.vue"),
     },
     {
-      path: "/iot-dashboard",
-      name: "iot-dashboard",
-      component: () => import("../views/IoTDashboard.vue"),
-    },
-    {
       path: "/default-settings",
       alias: "/settings",
       name: "default-settings",
@@ -37,7 +32,7 @@ router.beforeEach((to) => {
   if (to.path === "/") {
     const isConnected =
       BleService.connectedServer && BleService.connectedServer.connected;
-    return isConnected ? "/iot-dashboard" : "/ble-dashboard";
+    return isConnected ? "/remote" : "/ble-dashboard";
   }
 });
 

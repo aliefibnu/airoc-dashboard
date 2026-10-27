@@ -41,8 +41,6 @@ class BleService {
     };
   }
 
-  initNoble() {}
-
   async startScanning() {
     try {
       console.log("[BLE] Membuka jendela pemindaian browser...");

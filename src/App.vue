@@ -22,12 +22,6 @@
             active-class="text-yellow-600"
             >SETTINGS</RouterLink
           >
-          <RouterLink
-            to="/iot-dashboard"
-            class="text-lg font-bold uppercase hover:text-yellow-900 transition-colors"
-            active-class="text-yellow-600"
-            >IOT</RouterLink
-          >
         </nav>
       </div>
     </header>

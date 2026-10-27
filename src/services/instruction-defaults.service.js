@@ -3,20 +3,31 @@ import BleService from "@/services/ble.services.js";
 
 const STORAGE_KEY_DEFAULTS = "airoc_instruction_defaults";
 
+const CRUCIAL_DEFAULT_KEYS = {
+  SPEED: ["level"],
+  MAJU: ["cm"],
+  MUNDUR: ["cm"],
+  KANAN: ["deg"],
+  KIRI: ["deg"],
+  BELOK_KANAN: ["deg"],
+  BELOK_KIRI: ["deg"],
+  FOLLOW_LINE: ["jumlah_simpangan"],
+  MAJU_LINE: ["max_cm"],
+  MUNDUR_LINE: ["max_cm"],
+  TUNGGU: ["ms"],
+  BEEP: ["frekuensi"],
+};
+
 class InstructionDefaultsService {
   constructor() {
     this.listeners = new Set();
     this.defaults = this._loadDefaults();
 
     BleService.onConnect(async (device) => {
-      console.log(
-        `[InstructionDefaults] BLE terhubung ke "${device.name || device.id}", menyinkronkan default value...`,
-      );
       try {
         await this.syncToLeanbot();
-        console.log("[InstructionDefaults] Auto-sync saat koneksi BLE sukses!");
       } catch (err) {
-        console.warn("[InstructionDefaults] Auto-sync saat koneksi BLE gagal:", err);
+        console.warn(err);
       }
     });
   }
@@ -24,11 +35,14 @@ class InstructionDefaultsService {
   _getBaselines() {
     const baselines = {};
     INSTRUCTION_ALIASES.forEach((item) => {
-      if (Array.isArray(item.params) && item.params.length > 0) {
+      const allowedParams = CRUCIAL_DEFAULT_KEYS[item.alias];
+      if (allowedParams && Array.isArray(item.params)) {
         baselines[item.alias] = {};
         item.params.forEach((p) => {
-          baselines[item.alias][p.name] =
-            p.defaultValue !== undefined ? p.defaultValue : "";
+          if (allowedParams.includes(p.name)) {
+            baselines[item.alias][p.name] =
+              p.defaultValue !== undefined ? p.defaultValue : "";
+          }
         });
       }
     });
@@ -42,17 +56,15 @@ class InstructionDefaultsService {
       if (raw) {
         const parsed = JSON.parse(raw);
         const merged = { ...baselines };
-        for (const alias in parsed) {
-          if (merged[alias]) {
+        for (const alias in baselines) {
+          if (parsed[alias]) {
             merged[alias] = { ...merged[alias], ...parsed[alias] };
-          } else {
-            merged[alias] = parsed[alias];
           }
         }
         return merged;
       }
     } catch (e) {
-      console.error("[InstructionDefaults] Gagal memuat dari localStorage:", e);
+      console.error(e);
     }
     return baselines;
   }
@@ -82,14 +94,13 @@ class InstructionDefaultsService {
         JSON.stringify(this.defaults),
       );
     } catch (e) {
-      console.error("[InstructionDefaults] Gagal menyimpan ke localStorage:", e);
+      console.error(e);
     }
     this._notify();
 
     let syncPromise = Promise.resolve({ success: false, reason: "Auto sync disabled" });
     if (autoSync && BleService.isConnected()) {
       syncPromise = this.syncToLeanbot().catch((err) => {
-        console.warn("[InstructionDefaults] Auto-sync gagal saat update default value:", err);
         return { success: false, reason: err.message || err };
       });
     }
@@ -103,65 +114,31 @@ class InstructionDefaultsService {
 
   generateSyncCommand() {
     const speedVal = this.getDefault("SPEED", "level") ?? 5;
-    const scanAngle = this.getDefault("BATAS_SCAN", "sudut_deg") ?? 90;
-    const scanDist = this.getDefault("SCAN_KANAN", "jarak_cm") ?? 20;
     const majuVal = this.getDefault("MAJU", "cm") ?? 10;
-    const majuSpeed = this.getDefault("MAJU", "speed") ?? speedVal;
     const mundurVal = this.getDefault("MUNDUR", "cm") ?? 10;
-    const mundurSpeed = this.getDefault("MUNDUR", "speed") ?? speedVal;
     const kananVal = this.getDefault("KANAN", "deg") ?? 90;
-    const kananSpeed = this.getDefault("KANAN", "speed") ?? speedVal;
     const kiriVal = this.getDefault("KIRI", "deg") ?? 90;
-    const kiriSpeed = this.getDefault("KIRI", "speed") ?? speedVal;
     const belokKananVal = this.getDefault("BELOK_KANAN", "deg") ?? 90;
-    const belokKananSpeed = this.getDefault("BELOK_KANAN", "speed") ?? speedVal;
     const belokKiriVal = this.getDefault("BELOK_KIRI", "deg") ?? 90;
-    const belokKiriSpeed = this.getDefault("BELOK_KIRI", "speed") ?? speedVal;
-    const dekatiVal = this.getDefault("DEKATI_OBJEK", "jarak_akhir_cm") ?? 6;
-    const dekatiSpeed = this.getDefault("DEKATI_OBJEK", "speed") ?? speedVal;
-    const jauhiVal = this.getDefault("JAUHI_OBJEK", "jarak_akhir_cm") ?? 20;
-    const jauhiSpeed = this.getDefault("JAUHI_OBJEK", "speed") ?? speedVal;
-    const cekVal = this.getDefault("CEK_OBJEK", "jarak_cm") ?? 20;
-    const tungguVal = this.getDefault("TUNGGU", "ms") ?? 1000;
-    const bunyiVal = this.getDefault("BUNYI", "jumlah") ?? 1;
     const followLineVal = this.getDefault("FOLLOW_LINE", "jumlah_simpangan") ?? 1;
-    const followLineSpeed = this.getDefault("FOLLOW_LINE", "speed") ?? speedVal;
     const majuLineVal = this.getDefault("MAJU_LINE", "max_cm") ?? 50;
-    const majuLineSpeed = this.getDefault("MAJU_LINE", "speed") ?? speedVal;
     const mundurLineVal = this.getDefault("MUNDUR_LINE", "max_cm") ?? 50;
-    const mundurLineSpeed = this.getDefault("MUNDUR_LINE", "speed") ?? speedVal;
+    const tungguVal = this.getDefault("TUNGGU", "ms") ?? 1000;
+    const beepVal = this.getDefault("BEEP", "frekuensi") ?? 1500;
 
     const parts = [
       `SPEED:${speedVal}`,
-      `BATAS_SCAN:${scanAngle}`,
       `CONFIG:MAJU,${majuVal}`,
-      `CONFIG:MAJU_SPEED,${majuSpeed}`,
       `CONFIG:MUNDUR,${mundurVal}`,
-      `CONFIG:MUNDUR_SPEED,${mundurSpeed}`,
       `CONFIG:KANAN,${kananVal}`,
-      `CONFIG:KANAN_SPEED,${kananSpeed}`,
       `CONFIG:KIRI,${kiriVal}`,
-      `CONFIG:KIRI_SPEED,${kiriSpeed}`,
       `CONFIG:BELOK_KANAN,${belokKananVal}`,
-      `CONFIG:BELOK_KANAN_SPEED,${belokKananSpeed}`,
       `CONFIG:BELOK_KIRI,${belokKiriVal}`,
-      `CONFIG:BELOK_KIRI_SPEED,${belokKiriSpeed}`,
-      `CONFIG:SPEED,${speedVal}`,
-      `CONFIG:BATAS_SCAN,${scanAngle}`,
-      `CONFIG:SCAN_JARAK,${scanDist}`,
-      `CONFIG:DEKATI,${dekatiVal}`,
-      `CONFIG:DEKATI_SPEED,${dekatiSpeed}`,
-      `CONFIG:JAUHI,${jauhiVal}`,
-      `CONFIG:JAUHI_SPEED,${jauhiSpeed}`,
-      `CONFIG:CEK,${cekVal}`,
-      `CONFIG:TUNGGU,${tungguVal}`,
-      `CONFIG:BUNYI,${bunyiVal}`,
       `CONFIG:FOLLOW_LINE,${followLineVal}`,
-      `CONFIG:FOLLOW_LINE_SPEED,${followLineSpeed}`,
       `CONFIG:MAJU_LINE,${majuLineVal}`,
-      `CONFIG:MAJU_LINE_SPEED,${majuLineSpeed}`,
       `CONFIG:MUNDUR_LINE,${mundurLineVal}`,
-      `CONFIG:MUNDUR_LINE_SPEED,${mundurLineSpeed}`,
+      `CONFIG:TUNGGU,${tungguVal}`,
+      `CONFIG:BEEP,${beepVal}`,
     ];
 
     return `CODE;${parts.join(";")}`;
@@ -172,7 +149,6 @@ class InstructionDefaultsService {
       return { success: false, reason: "Robot Bluetooth belum terhubung" };
     }
     const cmd = this.generateSyncCommand();
-    console.log("[InstructionDefaults] Mengirim perintah sync ke Leanbot:", cmd);
     await BleService.sendCommand(cmd);
     return { success: true, command: cmd };
   }
