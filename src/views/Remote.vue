@@ -85,7 +85,7 @@
       <textarea
         v-model="manualInstructionString"
         rows="3"
-        placeholder="KETIK ATAU KONFIRMASI TOMBOL DI BAWAH (CONTOH: SPEED:5;SCAN_KANAN:10,90;DEKATI_OBJEK:6;CAPIT;MUNDUR:8;BUNYI:2;STOP)..."
+        placeholder="KETIK ATAU KONFIRMASI TOMBOL DI BAWAH (CONTOH: SPEED:5;MAJU:10;BELOK_KANAN:90;FOLLOW_LINE:1;CAPIT;BUNYI:2;END)..."
         class="w-full font-mono text-base md:text-lg font-black bg-white border-4 border-black p-4 rounded-2xl shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] focus:outline-none focus:bg-yellow-100 select-text"
       ></textarea>
 
@@ -249,6 +249,31 @@ async function executeTestInstruction(name, payload) {
   await sendRawBle(cmd);
 }
 
+let abortBatchExecution = false;
+
+function parseInstructionBatches(rawStr, batchSize = 12) {
+  let cleaned = rawStr.trim();
+  if (cleaned.toUpperCase().startsWith("CODE;")) {
+    cleaned = cleaned.slice(5).trim();
+  }
+  const tokens = cleaned
+    .split(";")
+    .map((t) => t.trim())
+    .filter((t) => t.length > 0 && t.toUpperCase() !== "CODE" && t.toUpperCase() !== "PROD");
+
+  if (tokens.length === 0) return [];
+
+  const batches = [];
+  for (let i = 0; i < tokens.length; i += batchSize) {
+    const chunk = tokens.slice(i, i + batchSize);
+    if (!chunk.some((c) => c.toUpperCase() === "END" || c.toUpperCase() === "STOP")) {
+      chunk.push("END");
+    }
+    batches.push(`CODE;${chunk.join(";")}`);
+  }
+  return batches;
+}
+
 async function runProdMission() {
   const str = manualInstructionString.value.trim();
   if (!str) {
@@ -256,11 +281,50 @@ async function runProdMission() {
       "String instruksi kosong! Silakan tambahkan instruksi terlebih dahulu.";
     return;
   }
-  const codeCmd = str.toUpperCase().startsWith("CODE") ? str : `CODE;${str}`;
-  await sendRawBle(codeCmd);
+  if (!BleService.isConnected()) {
+    statusMessage.value = "Robot BLE belum terhubung!";
+    return;
+  }
+
+  const batches = parseInstructionBatches(str, 12);
+  if (batches.length === 0) {
+    statusMessage.value = "Tidak ada instruksi yang valid untuk dikirim.";
+    return;
+  }
+
+  abortBatchExecution = false;
+
+  try {
+    for (let i = 0; i < batches.length; i++) {
+      if (abortBatchExecution) {
+        statusMessage.value = "Eksekusi batch dibatalkan!";
+        break;
+      }
+
+      statusMessage.value = batches.length > 1
+        ? `Mengirim Batch ${i + 1}/${batches.length}...`
+        : "Mengirim instruksi misi...";
+
+      await sendRawBle(batches[i]);
+
+      if (i < batches.length - 1) {
+        statusMessage.value = `Batch ${i + 1}/${batches.length} terkirim. Menunggu robot menyelesaikan batch...`;
+        await BleService.waitForBatchCompletion(15000);
+      }
+    }
+
+    if (!abortBatchExecution) {
+      statusMessage.value = batches.length > 1
+        ? `Semua ${batches.length} batch misi berhasil dikirim dan selesai!`
+        : "Instruksi misi berhasil dikirim ke robot!";
+    }
+  } catch (err) {
+    statusMessage.value = `Gagal menjalankan misi: ${err.message || err}`;
+  }
 }
 
 async function emergencyStop() {
+  abortBatchExecution = true;
   try {
     await sendRawBle("EMERGENCY_STOP");
   } catch (err) {

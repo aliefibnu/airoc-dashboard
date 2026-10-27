@@ -4,10 +4,10 @@
 
 Seluruh instruksi yang dikirimkan ke robot Leanbot melalui Bluetooth BLE maupun Serial USB diawali dengan prefiks `CODE;`.
 
-Format transmisi multi-instruksi:
+Format transmisi multi-instruksi (Batch):
 
 ```
-String command = "CODE;SPEED:5;MAJU:10;BELOK_KANAN:90;MAJU_LINE:50;FOLLOW_LINE:1;BEEP:1500,100;STOP";
+String command = "CODE;SPEED:5;MAJU:10;BELOK_KANAN:90;MAJU_LINE:50;FOLLOW_LINE:1;BUNYI:2;END";
 ```
 
 Format transmisi single instruksi:
@@ -27,8 +27,9 @@ String command = "CODE;EMERGENCY_STOP";
 2. **Pemisah Antar Instruksi (`;`)**: Tanda titik koma digunakan untuk memisahkan satu instruksi dengan instruksi berikutnya dalam satu paket transmisi.
 3. **Pemisah Perintah dan Parameter (`:`)**: Tanda titik dua memisahkan nama perintah dengan parameternya.
 4. **Pemisah Multi-Parameter (`,`)**: Tanda koma memisahkan lebih dari satu nilai parameter pada perintah yang membutuhkan beberapa argumen.
-5. **Non-Blocking Serial Emergency Interruption**: Selama misi berlangsung, robot secara periodik membaca UART buffer sehingga perintah `EMERGENCY_STOP` atau `STOP` dapat langsung membatalkan eksekusi gerakan seketika.
-6. **Tombol Sentuh**: Tombol fisik sentuh `TB1A` hanya digunakan khusus untuk kalibrasi manual sensor infrared garis (`KALIBRASI`).
+5. **Eksekusi Batch Otomatis**: Instruksi panjang dipecah per batch (maksimum 12-15 instruksi per batch) dan otomatis diakhiri dengan instruksi `END`.
+6. **Non-Blocking Serial Emergency Interruption**: Selama misi berlangsung, robot secara periodik membaca UART stream sehingga perintah `EMERGENCY_STOP` atau `STOP` dapat langsung membatalkan eksekusi gerakan seketika.
+7. **Tombol Sentuh**: Tombol fisik sentuh `TB1A` hanya digunakan khusus untuk kalibrasi manual sensor infrared garis (`KALIBRASI`).
 
 ---
 
@@ -66,9 +67,8 @@ String command = "CODE;EMERGENCY_STOP";
 
 | Instruksi | Parameter | Fungsi |
 | --------- | --------- | ------ |
-| `BEEP` | `frekuensi,durasi_ms` | Membunyikan buzzer dengan frekuensi (Hz) dan durasi (ms) tertentu |
-| `LED` | `mode` | Mengatur mode LED: `1`/`ON`, `0`/`OFF`, `2`/`SMILE`, `3`/`FROWN`, `4`/`LEFT`, `5`/`RIGHT` |
-| `LED_WARNA` | `warna` | Mengatur warna seluruh LED RGB (MERAH, HIJAU, BIRU, KUNING, PUTIH, OFF, dll.) |
+| `BUNYI` | `jumlah` | Membunyikan buzzer sebanyak jumlah ketukan tertentu (default 1) |
+| `LED_WARNA` | `warna` | Mengatur warna seluruh LED RGB (dipilih via dropdown: PUTIH, MERAH, HIJAU, BIRU, KUNING, CYAN, MAGENTA, ORANGE, UNGU, OFF) |
 | `LED_KEDIP` | `jumlah,interval_ms` | Mengedipkan LED Kuning sebanyak jumlah pengulangan dengan interval tertentu |
 
 ---
@@ -96,4 +96,5 @@ String command = "CODE;EMERGENCY_STOP";
 | Instruksi | Parameter | Fungsi |
 | --------- | --------- | ------ |
 | `EMERGENCY_STOP` | — | Menghentikan seluruh motor seketika, menyalakan indikator merah, dan mengosongkan antrean perintah |
-| `CONFIG` | `parameter,nilai` | Mengatur nilai baseline/default krusial (`SPEED`, `MAJU`, `MUNDUR`, `KANAN`, `KIRI`, `BELOK_KANAN`, `BELOK_KIRI`, `FOLLOW_LINE`, `MAJU_LINE`, `MUNDUR_LINE`, `TUNGGU`, `BEEP`) |
+| `END` | — | Menandai akhir rangkaian atau batch instruksi dan menghentikan sisa gerakan motor |
+| `CONFIG` | `parameter,nilai` | Mengatur nilai baseline/default krusial (`SPEED`, `MAJU`, `MUNDUR`, `KANAN`, `KIRI`, `BELOK_KANAN`, `BELOK_KIRI`, `FOLLOW_LINE`, `MAJU_LINE`, `MUNDUR_LINE`, `TUNGGU`, `BUNYI`) |

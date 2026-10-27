@@ -167,7 +167,7 @@ const CRUCIAL_PARAMS = {
   MAJU_LINE: ["max_cm"],
   MUNDUR_LINE: ["max_cm"],
   TUNGGU: ["ms"],
-  BEEP: ["frekuensi"],
+  BUNYI: ["jumlah"],
 };
 
 const isBleConnected = ref(false);

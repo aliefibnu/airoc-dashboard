@@ -14,11 +14,11 @@ enum Opcode : uint8_t {
   OP_TUNGGU,
   OP_CAPIT,
   OP_LEPAS,
-  OP_BEEP,
-  OP_LED,
+  OP_BUNYI,
   OP_LED_WARNA,
   OP_LED_KEDIP,
   OP_EMERGENCY_STOP,
+  OP_END,
   OP_FOLLOW_LINE,
   OP_MAJU_LINE,
   OP_MUNDUR_LINE,
@@ -39,7 +39,7 @@ enum ConfigParam : uint8_t {
   CFG_MAJU_LINE,
   CFG_MUNDUR_LINE,
   CFG_TUNGGU,
-  CFG_BEEP
+  CFG_BUNYI
 };
 
 enum RobotState : uint8_t {
@@ -74,8 +74,7 @@ int16_t defaultFollowLine = 1;
 int16_t defaultMajuLine = 50;
 int16_t defaultMundurLine = 50;
 int16_t defaultTunggu = 1000;
-int16_t defaultBeepFreq = 1500;
-int16_t defaultBeepDur = 100;
+int16_t defaultBunyi = 1;
 
 char tokenBuf[48];
 uint8_t tokenLen = 0;
@@ -101,7 +100,7 @@ void rotateDeg(int deg, int dir, int speed);
 void pivotTurnDeg(int deg, int dir, int speed);
 void moveToLine(int dir, int maxDistCm, int speed);
 void followLineUntilIntersection(int targetIntersections, int speed);
-void playBeep(int freq, int duration);
+void playBunyi(int count);
 void blinkLed(int count, int intervalMs);
 uint8_t parseColorIndex(const char* s);
 CRGB getColorFromIndex(uint8_t idx);
@@ -163,11 +162,11 @@ void printOpcodeName(uint8_t op) {
     case OP_TUNGGU: Serial.print(F("TUNGGU")); break;
     case OP_CAPIT: Serial.print(F("CAPIT")); break;
     case OP_LEPAS: Serial.print(F("LEPAS")); break;
-    case OP_BEEP: Serial.print(F("BEEP")); break;
-    case OP_LED: Serial.print(F("LED")); break;
+    case OP_BUNYI: Serial.print(F("BUNYI")); break;
     case OP_LED_WARNA: Serial.print(F("LED_WARNA")); break;
     case OP_LED_KEDIP: Serial.print(F("LED_KEDIP")); break;
     case OP_EMERGENCY_STOP: Serial.print(F("EMG_STOP")); break;
+    case OP_END: Serial.print(F("END")); break;
     case OP_FOLLOW_LINE: Serial.print(F("FOLLOW_LINE")); break;
     case OP_MAJU_LINE: Serial.print(F("MAJU_LINE")); break;
     case OP_MUNDUR_LINE: Serial.print(F("MUNDUR_LINE")); break;
@@ -404,7 +403,7 @@ void moveToLine(int dir, int maxDistCm, int speed) {
   if (isLineDetected(LbIRLine.read())) {
     LbRGB.fillColor(CRGB::Green);
     LbRGB.show();
-    playBeep(1500, 100);
+    playBunyi(1);
     return;
   }
 
@@ -429,7 +428,7 @@ void moveToLine(int dir, int maxDistCm, int speed) {
   if (!emergencyFlag) {
     LbRGB.fillColor(found ? CRGB::Green : CRGB::Red);
     LbRGB.show();
-    playBeep(1500, 100);
+    playBunyi(1);
   }
 }
 
@@ -499,7 +498,7 @@ void followLineUntilIntersection(int targetIntersections, int speed) {
           LbMotion.stopAndWait();
           LbRGB.fillColor(CRGB::Red);
           LbRGB.show();
-          playBeep(1500, 100);
+          playBunyi(1);
           return;
         }
         break;
@@ -517,16 +516,18 @@ void followLineUntilIntersection(int targetIntersections, int speed) {
   if (!emergencyFlag) {
     LbRGB.fillColor(CRGB::Green);
     LbRGB.show();
-    playBeep(1500, 100);
+    playBunyi(1);
   }
 }
 
-void playBeep(int freq, int duration) {
+void playBunyi(int count) {
   if (emergencyFlag) return;
-  if (freq <= 0) freq = 1500;
-  if (duration <= 0) duration = 100;
-  Leanbot.tone(freq, duration);
-  delayInterruptible(duration);
+  if (count <= 0) count = 1;
+  for (int i = 0; i < count; i++) {
+    Leanbot.tone(1500, 100);
+    delayInterruptible(150);
+    if (emergencyFlag) break;
+  }
 }
 
 void blinkLed(int count, int intervalMs) {
@@ -633,7 +634,7 @@ bool parseInstruction(char* str, Instruction& inst) {
     inst.opcode = OP_BELOK_KANAN;
     inst.p1 = defaultBelokKanan;
     inst.p2 = 0;
-  } else if (strcasecmp_P(cmd, PSTR("STOP")) == 0 || strcasecmp_P(cmd, PSTR("END")) == 0) {
+  } else if (strcasecmp_P(cmd, PSTR("STOP")) == 0) {
     inst.opcode = OP_STOP;
   } else if (strcasecmp_P(cmd, PSTR("SPEED")) == 0) {
     inst.opcode = OP_SPEED;
@@ -645,13 +646,9 @@ bool parseInstruction(char* str, Instruction& inst) {
     inst.opcode = OP_CAPIT;
   } else if (strcasecmp_P(cmd, PSTR("LEPAS")) == 0) {
     inst.opcode = OP_LEPAS;
-  } else if (strcasecmp_P(cmd, PSTR("BEEP")) == 0) {
-    inst.opcode = OP_BEEP;
-    inst.p1 = defaultBeepFreq;
-    inst.p2 = defaultBeepDur;
-  } else if (strcasecmp_P(cmd, PSTR("LED")) == 0) {
-    inst.opcode = OP_LED;
-    inst.p1 = 1;
+  } else if (strcasecmp_P(cmd, PSTR("BUNYI")) == 0) {
+    inst.opcode = OP_BUNYI;
+    inst.p1 = defaultBunyi;
   } else if (strcasecmp_P(cmd, PSTR("LED_WARNA")) == 0) {
     inst.opcode = OP_LED_WARNA;
     inst.p1 = 7;
@@ -661,6 +658,8 @@ bool parseInstruction(char* str, Instruction& inst) {
     inst.p2 = 200;
   } else if (strcasecmp_P(cmd, PSTR("EMERGENCY_STOP")) == 0 || strcasecmp_P(cmd, PSTR("EMERGENCY")) == 0) {
     inst.opcode = OP_EMERGENCY_STOP;
+  } else if (strcasecmp_P(cmd, PSTR("END")) == 0) {
+    inst.opcode = OP_END;
   } else if (strcasecmp_P(cmd, PSTR("FOLLOW_LINE")) == 0) {
     inst.opcode = OP_FOLLOW_LINE;
     inst.p1 = defaultFollowLine;
@@ -697,24 +696,7 @@ bool parseInstruction(char* str, Instruction& inst) {
       while (*params == ' ' || *params == '\t') params++;
     }
 
-    if (inst.opcode == OP_LED) {
-      if (strcasecmp_P(params, PSTR("ON")) == 0 || strcmp_P(params, PSTR("1")) == 0) {
-        inst.p1 = 1;
-      } else if (strcasecmp_P(params, PSTR("OFF")) == 0 || strcmp_P(params, PSTR("0")) == 0 || strcasecmp_P(params, PSTR("CLEAR")) == 0) {
-        inst.p1 = 0;
-      } else if (strcasecmp_P(params, PSTR("SMILE")) == 0 || strcasecmp_P(params, PSTR("SMILEY")) == 0) {
-        inst.p1 = 2;
-      } else if (strcasecmp_P(params, PSTR("FROWN")) == 0 || strcasecmp_P(params, PSTR("FROWNING")) == 0) {
-        inst.p1 = 3;
-      } else if (strcasecmp_P(params, PSTR("LEFT")) == 0 || strcasecmp_P(params, PSTR("KIRI")) == 0) {
-        inst.p1 = 4;
-      } else if (strcasecmp_P(params, PSTR("RIGHT")) == 0 || strcasecmp_P(params, PSTR("KANAN")) == 0) {
-        inst.p1 = 5;
-      } else {
-        inst.p1 = 10;
-        inst.p2 = parseColorIndex(params);
-      }
-    } else if (inst.opcode == OP_LED_WARNA) {
+    if (inst.opcode == OP_LED_WARNA) {
       inst.p1 = parseColorIndex(params);
     } else if (inst.opcode == OP_FOLLOW_LINE) {
       char* comma = strchr(params, ',');
@@ -751,7 +733,7 @@ bool parseInstruction(char* str, Instruction& inst) {
         else if (strcasecmp_P(key, PSTR("MAJU_LINE")) == 0) { inst.p1 = CFG_MAJU_LINE; inst.p2 = numVal; }
         else if (strcasecmp_P(key, PSTR("MUNDUR_LINE")) == 0) { inst.p1 = CFG_MUNDUR_LINE; inst.p2 = numVal; }
         else if (strcasecmp_P(key, PSTR("TUNGGU")) == 0) { inst.p1 = CFG_TUNGGU; inst.p2 = numVal; }
-        else if (strcasecmp_P(key, PSTR("BEEP")) == 0) { inst.p1 = CFG_BEEP; inst.p2 = numVal; }
+        else if (strcasecmp_P(key, PSTR("BUNYI")) == 0) { inst.p1 = CFG_BUNYI; inst.p2 = numVal; }
       }
     } else {
       char* comma = strchr(params, ',');
@@ -831,37 +813,8 @@ void executeInstruction(const Instruction& inst) {
       delayInterruptible(400);
       break;
 
-    case OP_BEEP:
-      playBeep(inst.p1, inst.p2);
-      break;
-
-    case OP_LED:
-      if (inst.p1 == 1) {
-        LbRGB.fillColor(CRGB::White);
-        LbRGB.show();
-      } else if (inst.p1 == 0) {
-        LbRGB.clear();
-        LbRGB.show();
-      } else if (inst.p1 == 2) {
-        LbRGB.clear();
-        LbRGB.fillColor(CRGB::Green, BITMAP(ledA, ledB, ledC, ledD));
-        LbRGB.show();
-      } else if (inst.p1 == 3) {
-        LbRGB.clear();
-        LbRGB.fillColor(CRGB::Yellow, BITMAP(ledA, ledF, ledE, ledD));
-        LbRGB.show();
-      } else if (inst.p1 == 4) {
-        LbRGB.clear();
-        LbRGB.fillColor(CRGB::Red, BITMAP(ledA, ledO, ledE, ledD, ledC));
-        LbRGB.show();
-      } else if (inst.p1 == 5) {
-        LbRGB.clear();
-        LbRGB.fillColor(CRGB::Green, BITMAP(ledD, ledO, ledF, ledA, ledB));
-        LbRGB.show();
-      } else if (inst.p1 == 10) {
-        LbRGB.fillColor(getColorFromIndex(inst.p2));
-        LbRGB.show();
-      }
+    case OP_BUNYI:
+      playBunyi(inst.p1);
       break;
 
     case OP_LED_WARNA:
@@ -875,6 +828,12 @@ void executeInstruction(const Instruction& inst) {
 
     case OP_EMERGENCY_STOP:
       triggerEmergencyStop();
+      break;
+
+    case OP_END:
+      LbMotion.runLR(0, 0);
+      LbMotion.stopAndWait();
+      Serial.println(F("[BATCH_END]"));
       break;
 
     case OP_FOLLOW_LINE:
@@ -903,7 +862,7 @@ void executeInstruction(const Instruction& inst) {
       LbTouch.readBits();
       LbRGB.fillColor(CRGB::Black);
       LbRGB.show();
-      playBeep(1500, 200);
+      playBunyi(2);
       break;
 
     case OP_CONFIG: {
@@ -925,7 +884,7 @@ void executeInstruction(const Instruction& inst) {
         case CFG_MAJU_LINE: if (val > 0) defaultMajuLine = val; break;
         case CFG_MUNDUR_LINE: if (val > 0) defaultMundurLine = val; break;
         case CFG_TUNGGU: if (val > 0) defaultTunggu = val; break;
-        case CFG_BEEP: if (val > 0) defaultBeepFreq = val; break;
+        case CFG_BUNYI: if (val > 0) defaultBunyi = val; break;
       }
       break;
     }
@@ -963,6 +922,7 @@ void executeCommandQueue() {
   commandCount = 0;
   if (!emergencyFlag) {
     updateRobotState(STATE_READY);
+    Serial.println(F("BATCH_READY"));
   }
 }
 

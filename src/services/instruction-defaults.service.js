@@ -15,7 +15,7 @@ const CRUCIAL_DEFAULT_KEYS = {
   MAJU_LINE: ["max_cm"],
   MUNDUR_LINE: ["max_cm"],
   TUNGGU: ["ms"],
-  BEEP: ["frekuensi"],
+  BUNYI: ["jumlah"],
 };
 
 class InstructionDefaultsService {
@@ -124,7 +124,7 @@ class InstructionDefaultsService {
     const majuLineVal = this.getDefault("MAJU_LINE", "max_cm") ?? 50;
     const mundurLineVal = this.getDefault("MUNDUR_LINE", "max_cm") ?? 50;
     const tungguVal = this.getDefault("TUNGGU", "ms") ?? 1000;
-    const beepVal = this.getDefault("BEEP", "frekuensi") ?? 1500;
+    const bunyiVal = this.getDefault("BUNYI", "jumlah") ?? 1;
 
     const parts = [
       `SPEED:${speedVal}`,
@@ -138,7 +138,7 @@ class InstructionDefaultsService {
       `CONFIG:MAJU_LINE,${majuLineVal}`,
       `CONFIG:MUNDUR_LINE,${mundurLineVal}`,
       `CONFIG:TUNGGU,${tungguVal}`,
-      `CONFIG:BEEP,${beepVal}`,
+      `CONFIG:BUNYI,${bunyiVal}`,
     ];
 
     return `CODE;${parts.join(";")}`;

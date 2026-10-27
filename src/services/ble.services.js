@@ -10,6 +10,7 @@ class BleService {
     this.characteristicUUID = BLE_CHARACTERISTIC;
     this.disconnectListeners = new Set();
     this.connectListeners = new Set();
+    this.dataListeners = new Set();
     this._onGattDisconnected = this._onGattDisconnected.bind(this);
   }
 
@@ -39,6 +40,23 @@ class BleService {
     return () => {
       this.connectListeners.delete(listener);
     };
+  }
+
+  onData(listener) {
+    this.dataListeners.add(listener);
+    return () => {
+      this.dataListeners.delete(listener);
+    };
+  }
+
+  _notifyDataListeners(data) {
+    this.dataListeners.forEach((fn) => {
+      try {
+        fn(data);
+      } catch (e) {
+        console.error(e);
+      }
+    });
   }
 
   async startScanning() {
@@ -84,6 +102,21 @@ class BleService {
 
     this.connectedServer = await device.gatt.connect();
     this.connectedDevice = device;
+
+    try {
+      const service = await this.connectedServer.getPrimaryService(this.serviceUUID);
+      const characteristic = await service.getCharacteristic(this.characteristicUUID);
+      if (characteristic.properties.notify) {
+        await characteristic.startNotifications();
+        characteristic.addEventListener("characteristicvaluechanged", (event) => {
+          const decoder = new TextDecoder();
+          const str = decoder.decode(event.target.value);
+          this._notifyDataListeners(str);
+        });
+      }
+    } catch (e) {
+      console.warn("[BLE] Gagal setup notifications:", e);
+    }
 
     this.connectListeners.forEach((listener) => {
       try {
@@ -192,6 +225,33 @@ class BleService {
         await new Promise((resolve) => setTimeout(resolve, 25));
       }
     }
+  }
+
+  waitForBatchCompletion(timeoutMs = 15000) {
+    return new Promise((resolve) => {
+      let timer = null;
+      let unsubscribe = null;
+
+      const finish = () => {
+        if (timer) clearTimeout(timer);
+        if (unsubscribe) unsubscribe();
+        resolve(true);
+      };
+
+      unsubscribe = this.onData((str) => {
+        if (
+          str.includes("BATCH_READY") ||
+          str.includes("BATCH_END") ||
+          str.includes("READY")
+        ) {
+          finish();
+        }
+      });
+
+      timer = setTimeout(() => {
+        finish();
+      }, timeoutMs);
+    });
   }
 }
 

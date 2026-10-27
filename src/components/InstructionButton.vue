@@ -51,7 +51,22 @@
               </h3>
             </div>
 
+            <select
+              v-if="param.type === 'select' || (param.options && param.options.length > 0)"
+              v-model="inputValues[param.name]"
+              class="w-full bg-white border-4 border-black rounded-xl p-3 text-lg font-black font-mono focus:outline-none focus:bg-yellow-100 shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] cursor-pointer uppercase"
+            >
+              <option
+                v-for="opt in param.options"
+                :key="typeof opt === 'object' ? opt.value : opt"
+                :value="typeof opt === 'object' ? opt.value : opt"
+              >
+                {{ typeof opt === 'object' ? opt.label : opt }}
+              </option>
+            </select>
+
             <input
+              v-else
               v-model="inputValues[param.name]"
               :type="param.type || 'text'"
               :inputmode="getInputMode(param)"
