@@ -369,7 +369,20 @@ async function runProdMission() {
 
       if (i < batches.length - 1) {
         statusMessage.value = `Batch ${i + 1}/${batches.length} terkirim. Menunggu robot menyelesaikan batch...`;
-        await BleService.waitForBatchCompletion(15000);
+        const res = await BleService.waitForBatchCompletion(180000);
+        if (!res.success) {
+          abortBatchExecution = true;
+          statusMessage.value = `Misi berhenti pada Batch ${i + 1}: ${res.reason}`;
+          break;
+        }
+      } else {
+        statusMessage.value = `Batch terakhir (${i + 1}/${batches.length}) sedang dijalankan robot...`;
+        const res = await BleService.waitForBatchCompletion(180000);
+        if (!res.success && res.reason.includes("Emergency")) {
+          abortBatchExecution = true;
+          statusMessage.value = `Misi dihentikan: ${res.reason}`;
+          break;
+        }
       }
     }
 

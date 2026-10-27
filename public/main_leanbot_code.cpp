@@ -222,7 +222,7 @@ bool checkEmergency() {
   while (Serial.available() > 0) {
     char c = Serial.read();
     if (c >= 'a' && c <= 'z') c -= 32;
-    if ((c >= 'A' && c <= 'Z') || c == '_' || c == ';') {
+    if ((c >= 'A' && c <= 'Z') || c == '_') {
       if (emergencyRxLen < sizeof(emergencyRxBuf) - 1) {
         emergencyRxBuf[emergencyRxLen++] = c;
         emergencyRxBuf[emergencyRxLen] = '\0';
@@ -231,13 +231,11 @@ bool checkEmergency() {
         emergencyRxBuf[sizeof(emergencyRxBuf) - 2] = c;
         emergencyRxBuf[sizeof(emergencyRxBuf) - 1] = '\0';
       }
-      if (strstr_P(emergencyRxBuf, PSTR("STOP")) != NULL ||
-          strstr_P(emergencyRxBuf, PSTR("EMERGENCY")) != NULL ||
-          strstr_P(emergencyRxBuf, PSTR("END")) != NULL) {
+      if (strstr_P(emergencyRxBuf, PSTR("EMERGENCY")) != NULL) {
         triggerEmergencyStop();
         return true;
       }
-    } else if (c == '\n' || c == '\r') {
+    } else if (c == '\n' || c == '\r' || c == ';') {
       emergencyRxLen = 0;
       emergencyRxBuf[0] = '\0';
     }
@@ -260,13 +258,14 @@ void loop() {
         prefixBuf[sizeof(prefixBuf) - 1] = '\0';
       }
 
-      if (strstr_P(prefixBuf, PSTR("STOP")) != NULL || strstr_P(prefixBuf, PSTR("EMG")) != NULL) {
+      if (strstr_P(prefixBuf, PSTR("EMERGENCY")) != NULL) {
         triggerEmergencyStop();
         return;
       }
 
       if (strstr_P(prefixBuf, PSTR("CODE;")) != NULL || strstr_P(prefixBuf, PSTR("code;")) != NULL) {
         inPacket = true;
+        emergencyFlag = false;
         commandCount = 0;
         tokenLen = 0;
         prefixLen = 0;

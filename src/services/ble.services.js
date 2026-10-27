@@ -106,7 +106,7 @@ class BleService {
     try {
       const service = await this.connectedServer.getPrimaryService(this.serviceUUID);
       const characteristic = await service.getCharacteristic(this.characteristicUUID);
-      if (characteristic.properties.notify) {
+      if (characteristic.properties.notify || characteristic.properties.indicate) {
         await characteristic.startNotifications();
         characteristic.addEventListener("characteristicvaluechanged", (event) => {
           const decoder = new TextDecoder();
@@ -199,7 +199,13 @@ class BleService {
       throw new Error("Perangkat Bluetooth belum terhubung!");
     }
     const trimmed = commandStr.trim();
-    const rawCmd = trimmed.toUpperCase().startsWith("CODE;") ? trimmed : `CODE;${trimmed}`;
+    let rawCmd = trimmed;
+    if (
+      !trimmed.toUpperCase().startsWith("CODE;") &&
+      !trimmed.toUpperCase().startsWith("EMERGENCY")
+    ) {
+      rawCmd = `CODE;${trimmed}`;
+    }
     const fullCmd = rawCmd.endsWith("\n") ? rawCmd : `${rawCmd}\n`;
     const encoder = new TextEncoder();
     const data = encoder.encode(fullCmd);
@@ -227,29 +233,36 @@ class BleService {
     }
   }
 
-  waitForBatchCompletion(timeoutMs = 15000) {
+  waitForBatchCompletion(timeoutMs = 180000) {
     return new Promise((resolve) => {
       let timer = null;
       let unsubscribe = null;
+      let accumulated = "";
 
-      const finish = () => {
+      const finish = (result) => {
         if (timer) clearTimeout(timer);
         if (unsubscribe) unsubscribe();
-        resolve(true);
+        resolve(result);
       };
 
       unsubscribe = this.onData((str) => {
+        accumulated += str;
         if (
-          str.includes("BATCH_READY") ||
-          str.includes("BATCH_END") ||
-          str.includes("READY")
+          accumulated.includes("BATCH_READY") ||
+          accumulated.includes("[BATCH_END]") ||
+          accumulated.includes("[STATE] READY")
         ) {
-          finish();
+          finish({ success: true });
+        } else if (
+          accumulated.includes("EMERGENCY_STOP") ||
+          accumulated.includes("[STATE] EMG")
+        ) {
+          finish({ success: false, reason: "Emergency Stop terdeteksi" });
         }
       });
 
       timer = setTimeout(() => {
-        finish();
+        finish({ success: false, reason: "Batas waktu tunggu batch habis (Timeout)" });
       }, timeoutMs);
     });
   }
