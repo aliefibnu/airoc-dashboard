@@ -1,5 +1,4 @@
 import { INSTRUCTION_ALIASES } from "@/data/instruction-aliases.js";
-import BleService from "@/services/ble.services.js";
 
 const STORAGE_KEY_DEFAULTS = "airoc_instruction_defaults";
 
@@ -22,14 +21,6 @@ class InstructionDefaultsService {
   constructor() {
     this.listeners = new Set();
     this.defaults = this._loadDefaults();
-
-    BleService.onConnect(async (device) => {
-      try {
-        await this.syncToLeanbot();
-      } catch (err) {
-        console.warn(err);
-      }
-    });
   }
 
   _getBaselines() {
@@ -86,7 +77,7 @@ class InstructionDefaultsService {
     return this.defaults[alias];
   }
 
-  saveDefaults(newDefaults, autoSync = true) {
+  saveDefaults(newDefaults) {
     this.defaults = { ...this.defaults, ...newDefaults };
     try {
       localStorage.setItem(
@@ -97,60 +88,12 @@ class InstructionDefaultsService {
       console.error(e);
     }
     this._notify();
-
-    let syncPromise = Promise.resolve({ success: false, reason: "Auto sync disabled" });
-    if (autoSync && BleService.isConnected()) {
-      syncPromise = this.syncToLeanbot().catch((err) => {
-        return { success: false, reason: err.message || err };
-      });
-    }
-    return { defaults: this.defaults, syncPromise };
+    return { defaults: this.defaults };
   }
 
-  resetToBaselines(autoSync = true) {
+  resetToBaselines() {
     const baselines = this._getBaselines();
-    return this.saveDefaults(baselines, autoSync);
-  }
-
-  generateSyncCommand() {
-    const speedVal = this.getDefault("SPEED", "level") ?? 5;
-    const majuVal = this.getDefault("MAJU", "cm") ?? 10;
-    const mundurVal = this.getDefault("MUNDUR", "cm") ?? 10;
-    const kananVal = this.getDefault("KANAN", "deg") ?? 90;
-    const kiriVal = this.getDefault("KIRI", "deg") ?? 90;
-    const belokKananVal = this.getDefault("BELOK_KANAN", "deg") ?? 90;
-    const belokKiriVal = this.getDefault("BELOK_KIRI", "deg") ?? 90;
-    const followLineVal = this.getDefault("FOLLOW_LINE", "jumlah_simpangan") ?? 1;
-    const majuLineVal = this.getDefault("MAJU_LINE", "max_cm") ?? 50;
-    const mundurLineVal = this.getDefault("MUNDUR_LINE", "max_cm") ?? 50;
-    const tungguVal = this.getDefault("TUNGGU", "ms") ?? 1000;
-    const bunyiVal = this.getDefault("BUNYI", "jumlah") ?? 1;
-
-    const parts = [
-      `SPEED:${speedVal}`,
-      `CONFIG:MAJU,${majuVal}`,
-      `CONFIG:MUNDUR,${mundurVal}`,
-      `CONFIG:KANAN,${kananVal}`,
-      `CONFIG:KIRI,${kiriVal}`,
-      `CONFIG:BELOK_KANAN,${belokKananVal}`,
-      `CONFIG:BELOK_KIRI,${belokKiriVal}`,
-      `CONFIG:FOLLOW_LINE,${followLineVal}`,
-      `CONFIG:MAJU_LINE,${majuLineVal}`,
-      `CONFIG:MUNDUR_LINE,${mundurLineVal}`,
-      `CONFIG:TUNGGU,${tungguVal}`,
-      `CONFIG:BUNYI,${bunyiVal}`,
-    ];
-
-    return `CODE;${parts.join(";")}`;
-  }
-
-  async syncToLeanbot() {
-    if (!BleService.isConnected()) {
-      return { success: false, reason: "Robot Bluetooth belum terhubung" };
-    }
-    const cmd = this.generateSyncCommand();
-    await BleService.sendCommand(cmd);
-    return { success: true, command: cmd };
+    return this.saveDefaults(baselines);
   }
 
   subscribe(listener) {

@@ -23,23 +23,7 @@ enum Opcode : uint8_t {
   OP_MAJU_LINE,
   OP_MUNDUR_LINE,
   OP_STOP_LINE,
-  OP_KALIBRASI,
-  OP_CONFIG
-};
-
-enum ConfigParam : uint8_t {
-  CFG_SPEED = 1,
-  CFG_MAJU,
-  CFG_MUNDUR,
-  CFG_KANAN,
-  CFG_KIRI,
-  CFG_BELOK_KANAN,
-  CFG_BELOK_KIRI,
-  CFG_FOLLOW_LINE,
-  CFG_MAJU_LINE,
-  CFG_MUNDUR_LINE,
-  CFG_TUNGGU,
-  CFG_BUNYI
+  OP_KALIBRASI
 };
 
 enum RobotState : uint8_t {
@@ -62,19 +46,6 @@ uint8_t commandCount = 0;
 int16_t currentSpeed = 1000;
 volatile bool emergencyFlag = false;
 RobotState currentRobotState = STATE_READY;
-
-int16_t defaultSpeed = 5;
-int16_t defaultMaju = 10;
-int16_t defaultMundur = 10;
-int16_t defaultKanan = 90;
-int16_t defaultKiri = 90;
-int16_t defaultBelokKanan = 90;
-int16_t defaultBelokKiri = 90;
-int16_t defaultFollowLine = 1;
-int16_t defaultMajuLine = 50;
-int16_t defaultMundurLine = 50;
-int16_t defaultTunggu = 1000;
-int16_t defaultBunyi = 1;
 
 char tokenBuf[48];
 uint8_t tokenLen = 0;
@@ -172,7 +143,6 @@ void printOpcodeName(uint8_t op) {
     case OP_MUNDUR_LINE: Serial.print(F("MUNDUR_LINE")); break;
     case OP_STOP_LINE: Serial.print(F("STOP_LINE")); break;
     case OP_KALIBRASI: Serial.print(F("KALIBRASI")); break;
-    case OP_CONFIG: Serial.print(F("CONFIG")); break;
     default: Serial.print(op); break;
   }
 }
@@ -608,76 +578,48 @@ bool parseInstruction(char* str, Instruction& inst) {
 
   if (strcasecmp_P(cmd, PSTR("MAJU")) == 0) {
     inst.opcode = OP_MAJU;
-    inst.p1 = defaultMaju;
-    inst.p2 = 0;
   } else if (strcasecmp_P(cmd, PSTR("MUNDUR")) == 0) {
     inst.opcode = OP_MUNDUR;
-    inst.p1 = defaultMundur;
-    inst.p2 = 0;
   } else if (strcasecmp_P(cmd, PSTR("KANAN")) == 0 || strcasecmp_P(cmd, PSTR("ROTATE_KANAN")) == 0) {
     inst.opcode = OP_KANAN;
-    inst.p1 = defaultKanan;
-    inst.p2 = 0;
   } else if (strcasecmp_P(cmd, PSTR("KIRI")) == 0 || strcasecmp_P(cmd, PSTR("ROTATE_KIRI")) == 0) {
     inst.opcode = OP_KIRI;
-    inst.p1 = defaultKiri;
-    inst.p2 = 0;
   } else if (strcasecmp_P(cmd, PSTR("BELOK_KANAN")) == 0 || strcasecmp_P(cmd, PSTR("PIVOT_KANAN")) == 0) {
     inst.opcode = OP_BELOK_KANAN;
-    inst.p1 = defaultBelokKanan;
-    inst.p2 = 0;
   } else if (strcasecmp_P(cmd, PSTR("BELOK_KIRI")) == 0 || strcasecmp_P(cmd, PSTR("PIVOT_KIRI")) == 0) {
     inst.opcode = OP_BELOK_KIRI;
-    inst.p1 = defaultBelokKiri;
-    inst.p2 = 0;
   } else if (strcasecmp_P(cmd, PSTR("BELOK")) == 0) {
     inst.opcode = OP_BELOK_KANAN;
-    inst.p1 = defaultBelokKanan;
-    inst.p2 = 0;
   } else if (strcasecmp_P(cmd, PSTR("STOP")) == 0) {
     inst.opcode = OP_STOP;
   } else if (strcasecmp_P(cmd, PSTR("SPEED")) == 0) {
     inst.opcode = OP_SPEED;
-    inst.p1 = defaultSpeed;
   } else if (strcasecmp_P(cmd, PSTR("TUNGGU")) == 0) {
     inst.opcode = OP_TUNGGU;
-    inst.p1 = defaultTunggu;
   } else if (strcasecmp_P(cmd, PSTR("CAPIT")) == 0) {
     inst.opcode = OP_CAPIT;
   } else if (strcasecmp_P(cmd, PSTR("LEPAS")) == 0) {
     inst.opcode = OP_LEPAS;
   } else if (strcasecmp_P(cmd, PSTR("BUNYI")) == 0) {
     inst.opcode = OP_BUNYI;
-    inst.p1 = defaultBunyi;
   } else if (strcasecmp_P(cmd, PSTR("LED_WARNA")) == 0) {
     inst.opcode = OP_LED_WARNA;
-    inst.p1 = 7;
   } else if (strcasecmp_P(cmd, PSTR("LED_KEDIP")) == 0) {
     inst.opcode = OP_LED_KEDIP;
-    inst.p1 = 3;
-    inst.p2 = 200;
   } else if (strcasecmp_P(cmd, PSTR("EMERGENCY_STOP")) == 0 || strcasecmp_P(cmd, PSTR("EMERGENCY")) == 0) {
     inst.opcode = OP_EMERGENCY_STOP;
   } else if (strcasecmp_P(cmd, PSTR("END")) == 0) {
     inst.opcode = OP_END;
   } else if (strcasecmp_P(cmd, PSTR("FOLLOW_LINE")) == 0) {
     inst.opcode = OP_FOLLOW_LINE;
-    inst.p1 = defaultFollowLine;
-    inst.p2 = 0;
   } else if (strcasecmp_P(cmd, PSTR("MAJU_LINE")) == 0) {
     inst.opcode = OP_MAJU_LINE;
-    inst.p1 = defaultMajuLine;
-    inst.p2 = 0;
   } else if (strcasecmp_P(cmd, PSTR("MUNDUR_LINE")) == 0) {
     inst.opcode = OP_MUNDUR_LINE;
-    inst.p1 = defaultMundurLine;
-    inst.p2 = 0;
   } else if (strcasecmp_P(cmd, PSTR("STOP_LINE")) == 0) {
     inst.opcode = OP_STOP_LINE;
   } else if (strcasecmp_P(cmd, PSTR("KALIBRASI")) == 0 || strcasecmp_P(cmd, PSTR("CALIBRATE")) == 0) {
     inst.opcode = OP_KALIBRASI;
-  } else if (strcasecmp_P(cmd, PSTR("CONFIG")) == 0) {
-    inst.opcode = OP_CONFIG;
   } else {
     return false;
   }
@@ -713,27 +655,6 @@ bool parseInstruction(char* str, Instruction& inst) {
         if (strcasecmp_P(params, PSTR("OFF")) == 0 || strcmp_P(params, PSTR("0")) == 0) inst.p1 = 0;
         else if (strcasecmp_P(params, PSTR("ON")) == 0) inst.p1 = 9999;
         else inst.p1 = atoi(params);
-      }
-    } else if (inst.opcode == OP_CONFIG) {
-      char* comma = strchr(params, ',');
-      if (comma != NULL) {
-        *comma = '\0';
-        char* key = params;
-        char* val = comma + 1;
-        while (*val == ' ' || *val == '\t') val++;
-        int16_t numVal = atoi(val);
-        if (strcasecmp_P(key, PSTR("SPEED")) == 0) { inst.p1 = CFG_SPEED; inst.p2 = numVal; }
-        else if (strcasecmp_P(key, PSTR("MAJU")) == 0) { inst.p1 = CFG_MAJU; inst.p2 = numVal; }
-        else if (strcasecmp_P(key, PSTR("MUNDUR")) == 0) { inst.p1 = CFG_MUNDUR; inst.p2 = numVal; }
-        else if (strcasecmp_P(key, PSTR("KANAN")) == 0) { inst.p1 = CFG_KANAN; inst.p2 = numVal; }
-        else if (strcasecmp_P(key, PSTR("KIRI")) == 0) { inst.p1 = CFG_KIRI; inst.p2 = numVal; }
-        else if (strcasecmp_P(key, PSTR("BELOK_KANAN")) == 0) { inst.p1 = CFG_BELOK_KANAN; inst.p2 = numVal; }
-        else if (strcasecmp_P(key, PSTR("BELOK_KIRI")) == 0) { inst.p1 = CFG_BELOK_KIRI; inst.p2 = numVal; }
-        else if (strcasecmp_P(key, PSTR("FOLLOW_LINE")) == 0) { inst.p1 = CFG_FOLLOW_LINE; inst.p2 = numVal; }
-        else if (strcasecmp_P(key, PSTR("MAJU_LINE")) == 0) { inst.p1 = CFG_MAJU_LINE; inst.p2 = numVal; }
-        else if (strcasecmp_P(key, PSTR("MUNDUR_LINE")) == 0) { inst.p1 = CFG_MUNDUR_LINE; inst.p2 = numVal; }
-        else if (strcasecmp_P(key, PSTR("TUNGGU")) == 0) { inst.p1 = CFG_TUNGGU; inst.p2 = numVal; }
-        else if (strcasecmp_P(key, PSTR("BUNYI")) == 0) { inst.p1 = CFG_BUNYI; inst.p2 = numVal; }
       }
     } else {
       char* comma = strchr(params, ',');
@@ -864,30 +785,6 @@ void executeInstruction(const Instruction& inst) {
       LbRGB.show();
       playBunyi(2);
       break;
-
-    case OP_CONFIG: {
-      int16_t val = inst.p2;
-      switch (inst.p1) {
-        case CFG_SPEED:
-          if (val > 0) {
-            defaultSpeed = val;
-            currentSpeed = toMotorSpeed(val);
-          }
-          break;
-        case CFG_MAJU: if (val > 0) defaultMaju = val; break;
-        case CFG_MUNDUR: if (val > 0) defaultMundur = val; break;
-        case CFG_KANAN: if (val > 0) defaultKanan = val; break;
-        case CFG_KIRI: if (val > 0) defaultKiri = val; break;
-        case CFG_BELOK_KANAN: if (val > 0) defaultBelokKanan = val; break;
-        case CFG_BELOK_KIRI: if (val > 0) defaultBelokKiri = val; break;
-        case CFG_FOLLOW_LINE: if (val >= 0) defaultFollowLine = val; break;
-        case CFG_MAJU_LINE: if (val > 0) defaultMajuLine = val; break;
-        case CFG_MUNDUR_LINE: if (val > 0) defaultMundurLine = val; break;
-        case CFG_TUNGGU: if (val > 0) defaultTunggu = val; break;
-        case CFG_BUNYI: if (val > 0) defaultBunyi = val; break;
-      }
-      break;
-    }
 
     default:
       break;

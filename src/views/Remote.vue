@@ -84,29 +84,21 @@
     >
       <textarea
         v-model="manualInstructionString"
+        @input="onManualInstructionChange"
+        @change="onManualInstructionChange"
         rows="3"
         placeholder="KETIK ATAU KONFIRMASI TOMBOL DI BAWAH (CONTOH: SPEED:5;MAJU:10;BELOK_KANAN:90;FOLLOW_LINE:1;CAPIT;BUNYI:2;END)..."
         class="w-full font-mono text-base md:text-lg font-black bg-white border-4 border-black p-4 rounded-2xl shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] focus:outline-none focus:bg-yellow-100 select-text"
       ></textarea>
 
       <div class="flex flex-wrap items-center justify-between gap-4 pt-2">
-        <div class="flex flex-wrap items-center gap-3">
-          <button
-            type="button"
-            @click="runProdMission"
-            class="bg-green-500 text-black font-black uppercase text-base md:text-lg py-3.5 px-6 rounded-xl border-4 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:bg-green-400 active:translate-y-1 active:shadow-none transition-all cursor-pointer flex items-center gap-2"
-          >
-            <h3>JALANKAN MISI</h3>
-          </button>
-
-          <button
-            type="button"
-            @click="saveManualInstruction"
-            class="bg-yellow-400 text-black font-black uppercase text-base md:text-lg py-3.5 px-5 rounded-xl border-4 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:bg-yellow-300 active:translate-y-1 active:shadow-none transition-all cursor-pointer"
-          >
-            <h3>SIMPAN INSTRUKSI</h3>
-          </button>
-        </div>
+        <button
+          type="button"
+          @click="runProdMission"
+          class="bg-green-500 text-black font-black uppercase text-base md:text-lg py-3.5 px-6 rounded-xl border-4 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:bg-green-400 active:translate-y-1 active:shadow-none transition-all cursor-pointer flex items-center gap-2"
+        >
+          <h3>JALANKAN MISI</h3>
+        </button>
 
         <button
           type="button"
@@ -147,7 +139,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted, onUnmounted } from "vue";
+import { ref, watch, onMounted, onUnmounted } from "vue";
 import { RouterLink } from "vue-router";
 import InstructionButton from "@/components/InstructionButton.vue";
 import remoteDebugService from "@/services/remote-debug.service.js";
@@ -173,7 +165,9 @@ onMounted(() => {
   checkBle();
 
   unsubscribeState = remoteDebugService.subscribe((state) => {
-    manualInstructionString.value = state.instructionString;
+    if (manualInstructionString.value !== state.instructionString) {
+      manualInstructionString.value = state.instructionString;
+    }
     instructionList.value = state.instructions;
   });
 
@@ -186,6 +180,17 @@ onUnmounted(() => {
   if (unsubscribeState) unsubscribeState();
   if (removeDisconnectListener) removeDisconnectListener();
 });
+
+watch(manualInstructionString, (newVal) => {
+  if (newVal !== remoteDebugService.getInstructionString()) {
+    remoteDebugService.setInstructionString(newVal);
+  }
+});
+
+function onManualInstructionChange(e) {
+  const val = e.target.value;
+  remoteDebugService.setInstructionString(val);
+}
 
 function getInstructionsByCategory(catId) {
   return INSTRUCTION_ALIASES.filter((item) => item.categoryId === catId);
@@ -212,7 +217,7 @@ async function connectBle() {
       statusMessage.value = "Menghubungkan ke robot...";
       await BleService.connectDevice(firstId);
       checkBle();
-      statusMessage.value = `Berhasil terhubung ke ${connectedDeviceName.value || "Robot"}! Default value otomatis disinkronkan.`;
+      statusMessage.value = `Berhasil terhubung ke ${connectedDeviceName.value || "Robot"}!`;
     }
   } catch (err) {
     statusMessage.value = `Gagal menghubungkan BLE: ${err.message || err}`;
@@ -239,11 +244,56 @@ async function sendRawBle(cmd) {
   statusMessage.value = `Berhasil kirim instruksi: ${cmd}`;
 }
 
+function resolveInstructionToken(token) {
+  const trimmed = String(token || "").trim();
+  if (!trimmed) return "";
+  const colonIdx = trimmed.indexOf(":");
+  let cmd = trimmed;
+  let paramPart = "";
+  if (colonIdx !== -1) {
+    cmd = trimmed.slice(0, colonIdx).trim().toUpperCase();
+    paramPart = trimmed.slice(colonIdx + 1).trim();
+  } else {
+    cmd = trimmed.toUpperCase();
+  }
+
+  if (paramPart.length > 0) {
+    return `${cmd}:${paramPart}`;
+  }
+
+  const defs = instructionDefaultsService.getAllDefaults();
+  const defForCmd = defs[cmd];
+  if (defForCmd && typeof defForCmd === "object") {
+    const vals = Object.values(defForCmd).filter(
+      (v) => v !== undefined && v !== null && v !== "",
+    );
+    if (vals.length > 0) {
+      return `${cmd}:${vals.join(",")}`;
+    }
+  }
+
+  const action = INSTRUCTION_ALIASES.find(
+    (item) => item.alias.toUpperCase() === cmd || item.name.toUpperCase() === cmd,
+  );
+  if (action && Array.isArray(action.params) && action.params.length > 0) {
+    const defaultVals = action.params
+      .map((p) => p.defaultValue)
+      .filter((v) => v !== undefined && v !== null && v !== "");
+    if (defaultVals.length > 0) {
+      return `${cmd}:${defaultVals.join(",")}`;
+    }
+  }
+
+  return cmd;
+}
+
 async function executeTestInstruction(name, payload) {
   let cmd = name;
   const clean = remoteDebugService.normalizeParams(payload);
   if (clean.length > 0) {
     cmd = `${name}:${clean.join(",")}`;
+  } else {
+    cmd = resolveInstructionToken(name);
   }
   await sendRawBle(cmd);
 }
@@ -263,7 +313,8 @@ function parseInstructionBatches(rawStr, batchSize = 12) {
         t.length > 0 &&
         t.toUpperCase() !== "CODE" &&
         t.toUpperCase() !== "PROD",
-    );
+    )
+    .map((t) => resolveInstructionToken(t));
 
   if (tokens.length === 0) return [];
 
@@ -340,16 +391,5 @@ async function emergencyStop() {
   } catch (err) {
     statusMessage.value = `Emergency Stop gagal: ${err.message || err}`;
   }
-}
-
-function saveManualInstruction() {
-  remoteDebugService.setInstructionString(manualInstructionString.value);
-  refreshState();
-  statusMessage.value = "INSTRUKSI BERHASIL DISIMPAN KE PENYIMPANAN LOKAL";
-  setTimeout(() => {
-    if (statusMessage.value.includes("BERHASIL DISIMPAN")) {
-      statusMessage.value = "";
-    }
-  }, 2500);
 }
 </script>

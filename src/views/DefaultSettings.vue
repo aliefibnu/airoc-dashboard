@@ -139,7 +139,7 @@
           @click="saveDefaults"
           class="bg-green-500 text-black font-black uppercase text-base md:text-lg py-3.5 px-8 rounded-xl border-4 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:bg-green-400 active:translate-y-1 active:shadow-none transition-all cursor-pointer flex items-center gap-2"
         >
-          <span>SIMPAN & SINKRONKAN</span>
+          <span>SIMPAN DEFAULT</span>
         </button>
       </div>
     </div>
@@ -243,33 +243,19 @@ function initForm() {
   }
 }
 
-async function saveDefaults() {
-  const result = instructionDefaultsService.saveDefaults(editForm, true);
-  statusMessage.value = "DEFAULT VALUE BERHASIL DISIMPAN KE LOCALSTORAGE";
-
-  if (isBleConnected.value) {
-    try {
-      const syncRes = await result.syncPromise;
-      if (syncRes && syncRes.success) {
-        statusMessage.value =
-          "DEFAULT VALUE DISIMPAN & BERHASIL DISINKRONKAN KE LEANBOT!";
-      } else {
-        statusMessage.value = `Tersimpan, namun sync robot gagal: ${syncRes?.reason || "Timeout"}`;
-      }
-    } catch (e) {
-      statusMessage.value = `Tersimpan, namun sync BLE error: ${e.message || e}`;
-    }
-  }
+function saveDefaults() {
+  instructionDefaultsService.saveDefaults(editForm);
+  statusMessage.value = "DEFAULT VALUE BERHASIL DISIMPAN DI WEB";
 
   setTimeout(() => {
     if (statusMessage.value.includes("BERHASIL")) {
       statusMessage.value = "";
     }
-  }, 4000);
+  }, 3000);
 }
 
 function resetToStandard() {
-  instructionDefaultsService.resetToBaselines(true);
+  instructionDefaultsService.resetToBaselines();
   initForm();
   statusMessage.value = "SEMUA DEFAULT VALUE DIRESET KE NILAI AWAL STANDAR";
   setTimeout(() => {

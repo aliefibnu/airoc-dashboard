@@ -91,10 +91,9 @@ String command = "CODE;EMERGENCY_STOP";
 
 ---
 
-## 5. Keselamatan dan Konfigurasi Krusial
+## 5. Keselamatan dan Akhir Batch
 
 | Instruksi | Parameter | Fungsi |
 | --------- | --------- | ------ |
 | `EMERGENCY_STOP` | — | Menghentikan seluruh motor seketika, menyalakan indikator merah, dan mengosongkan antrean perintah |
 | `END` | — | Menandai akhir rangkaian atau batch instruksi dan menghentikan sisa gerakan motor |
-| `CONFIG` | `parameter,nilai` | Mengatur nilai baseline/default krusial (`SPEED`, `MAJU`, `MUNDUR`, `KANAN`, `KIRI`, `BELOK_KANAN`, `BELOK_KIRI`, `FOLLOW_LINE`, `MAJU_LINE`, `MUNDUR_LINE`, `TUNGGU`, `BUNYI`) |
