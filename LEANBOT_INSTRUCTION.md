@@ -2,32 +2,46 @@
 
 ## Format Transmisi Instruksi
 
-Seluruh instruksi yang dikirimkan ke robot Leanbot melalui Bluetooth BLE maupun Serial USB diawali dengan prefiks `CODE;`.
+Protokol transmisi mendukung sistem multi-batch (Batch 1 - 10) dengan konsep "terima seluruh batch terlebih dahulu, baru mulai eksekusi".
 
-Format transmisi multi-instruksi (Batch):
-
-```
-String command = "CODE;SPEED:5;MAJU:10;BELOK_KANAN:90;MAJU_LINE:50;FOLLOW_LINE:1;BUNYI:2;END";
-```
-
-Format transmisi single instruksi:
+Format pengunggahan batch (Batch 1 sampai 10, maksimal 12 instruksi per batch):
 
 ```
-String command = "CODE;MAJU:10,5";
+BATCH:1;SPEED:5;MAJU:10;BELOK_KANAN:90;MAJU_LINE:50;FOLLOW_LINE:1;BUNYI:2;END
+BATCH:2;FOLLOW_LINE:2,5;MAJU:15,5;CAPIT;END
+```
+
+Format memulai eksekusi seluruh batch misi:
+
+```
+START_MISSION
+```
+
+Format reset/pembersihan seluruh batch variabel:
+
+```
+CLEAR
 ```
 
 Format emergency stop:
 
 ```
-String command = "CODE;EMERGENCY_STOP";
+EMERGENCY_STOP
+```
+
+Format single instruksi (langsung dieksekusi):
+
+```
+CODE;MAJU:10,5;END
 ```
 
 ### Aturan Protokol Transmisi:
-1. **Prefiks Wajib `CODE;`**: Robot memproses data yang memiliki awalan `CODE;`. Data serial tanpa awalan `CODE;` akan otomatis diabaikan, kecuali kata kunci darurat (`STOP`, `EMERGENCY`).
-2. **Pemisah Antar Instruksi (`;`)**: Tanda titik koma digunakan untuk memisahkan satu instruksi dengan instruksi berikutnya dalam satu paket transmisi.
-3. **Pemisah Perintah dan Parameter (`:`)**: Tanda titik dua memisahkan nama perintah dengan parameternya.
-4. **Pemisah Multi-Parameter (`,`)**: Tanda koma memisahkan lebih dari satu nilai parameter pada perintah yang membutuhkan beberapa argumen.
-5. **Eksekusi Batch Otomatis**: Instruksi panjang dipecah per batch (maksimum 12-15 instruksi per batch) dan otomatis diakhiri dengan instruksi `END`.
+1. **Sistem Multi-Batch (Batch 1 - 10)**: Robot menyimpan instruksi di variabel array batch 1 sampai 10 (masing-masing maksimal 12 instruksi).
+2. **Await All Instructions**: Seluruh batch dikirim dan disimpan ke variabel robot terlebih dahulu sebelum robot mulai bergerak.
+3. **Mulai Eksekusi (`START_MISSION`)**: Robot mengeksekusi instruksi dari variabel Batch 1. Setelah selesai, robot memeriksa apakah Batch 2 memiliki instruksi; jika ya, dijalankan; jika kosong, berhenti. Proses ini berlanjut berurutan hingga Batch 10.
+4. **Pemisah Antar Instruksi (`;`)**: Tanda titik koma memisahkan instruksi dalam batch.
+5. **Pemisah Perintah dan Parameter (`:`)**: Tanda titik dua memisahkan nama perintah dan parameternya.
+6. **Reset Darurat (`EMERGENCY_STOP`)**: Menghentikan motor seketika dan mereset/mengosongkan seluruh variabel Batch 1 - 10 sehingga robot langsung bersih dan siap menerima instruksi baru.
 6. **Non-Blocking Serial Emergency Interruption**: Selama misi berlangsung, robot secara periodik membaca UART stream sehingga perintah `EMERGENCY_STOP` atau `STOP` dapat langsung membatalkan eksekusi gerakan seketika.
 7. **Tombol Sentuh**: Tombol fisik sentuh `TB1A` hanya digunakan khusus untuk kalibrasi manual sensor infrared garis (`KALIBRASI`).
 

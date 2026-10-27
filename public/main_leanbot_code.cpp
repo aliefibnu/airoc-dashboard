@@ -39,9 +39,17 @@ struct Instruction {
   int16_t p2;
 };
 
-#define MAX_COMMANDS 48
-Instruction commandQueue[MAX_COMMANDS];
-uint8_t commandCount = 0;
+#define MAX_BATCHES 10
+#define MAX_COMMANDS_PER_BATCH 12
+
+struct Batch {
+  Instruction commands[MAX_COMMANDS_PER_BATCH];
+  uint8_t count;
+};
+
+Batch batchQueue[MAX_BATCHES];
+uint8_t currentBatchIdx = 0;
+bool isLegacyCode = false;
 
 int16_t currentSpeed = 1000;
 volatile bool emergencyFlag = false;
@@ -49,7 +57,7 @@ RobotState currentRobotState = STATE_READY;
 
 char tokenBuf[48];
 uint8_t tokenLen = 0;
-char prefixBuf[8];
+char prefixBuf[16];
 uint8_t prefixLen = 0;
 char emergencyRxBuf[16];
 uint8_t emergencyRxLen = 0;
@@ -62,7 +70,8 @@ bool isLineDetected(int line);
 void updateRobotState(RobotState newState);
 void printOpcodeName(uint8_t op);
 void printInstructionInfo(const Instruction& inst);
-bool enqueueToken();
+void clearAllBatches();
+bool enqueueBatchToken(uint8_t bIdx);
 void triggerEmergencyStop();
 bool checkEmergency();
 void delayInterruptible(unsigned long ms);
@@ -77,8 +86,7 @@ uint8_t parseColorIndex(const char* s);
 CRGB getColorFromIndex(uint8_t idx);
 bool parseInstruction(char* str, Instruction& inst);
 void executeInstruction(const Instruction& inst);
-void executeCommandQueue();
-void processCodePacket(char* payload);
+void executeAllBatches();
 
 int freeRam() {
   extern int __heap_start, *__brkval;
@@ -159,20 +167,28 @@ void printInstructionInfo(const Instruction& inst) {
   }
 }
 
-bool enqueueToken() {
+void clearAllBatches() {
+  for (uint8_t b = 0; b < MAX_BATCHES; b++) {
+    batchQueue[b].count = 0;
+  }
+}
+
+bool enqueueBatchToken(uint8_t bIdx) {
   if (tokenLen == 0) return false;
   tokenBuf[tokenLen] = '\0';
   Instruction inst;
   bool ok = parseInstruction(tokenBuf, inst);
-  Serial.print(F("[RECV] "));
-  Serial.print(tokenBuf);
-  if (ok && commandCount < MAX_COMMANDS) {
-    commandQueue[commandCount++] = inst;
-    Serial.print(F(" (#"));
-    Serial.print(commandCount);
-    Serial.println(')');
-  } else {
-    Serial.println(F(" ERR"));
+  if (ok && inst.opcode != OP_NONE) {
+    if (inst.opcode == OP_END) {
+    } else if (bIdx < MAX_BATCHES && batchQueue[bIdx].count < MAX_COMMANDS_PER_BATCH) {
+      batchQueue[bIdx].commands[batchQueue[bIdx].count++] = inst;
+      Serial.print(F("[LOAD] B"));
+      Serial.print(bIdx + 1);
+      Serial.print(F(" #"));
+      Serial.print(batchQueue[bIdx].count);
+      Serial.print(' ');
+      Serial.println(tokenBuf);
+    }
   }
   tokenLen = 0;
   tokenBuf[0] = '\0';
@@ -186,6 +202,7 @@ void setup() {
   LbRGB.fillColor(CRGB::Black);
   LbRGB.show();
   Leanbot.tone(1500, 100);
+  clearAllBatches();
   inPacket = false;
   tokenLen = 0;
   prefixLen = 0;
@@ -206,7 +223,7 @@ void triggerEmergencyStop() {
   Leanbot.noTone();
   LbRGB.fillColor(CRGB::Red);
   LbRGB.show();
-  commandCount = 0;
+  clearAllBatches();
   inPacket = false;
   tokenLen = 0;
   prefixLen = 0;
@@ -263,10 +280,55 @@ void loop() {
         return;
       }
 
+      if (strstr_P(prefixBuf, PSTR("CLEAR")) != NULL) {
+        clearAllBatches();
+        prefixLen = 0;
+        prefixBuf[0] = '\0';
+        Serial.println(F("[BATCHES_CLEARED]"));
+        return;
+      }
+
+      if (strstr_P(prefixBuf, PSTR("START")) != NULL) {
+        prefixLen = 0;
+        prefixBuf[0] = '\0';
+        executeAllBatches();
+        return;
+      }
+
+      char* batchPtr = strstr_P(prefixBuf, PSTR("BATCH:"));
+      if (batchPtr != NULL) {
+        char* semicolon = strchr(batchPtr, ';');
+        if (semicolon != NULL) {
+          *semicolon = '\0';
+          int bNum = atoi(batchPtr + 6);
+          if (bNum >= 1 && bNum <= MAX_BATCHES) {
+            currentBatchIdx = bNum - 1;
+          } else {
+            currentBatchIdx = 0;
+          }
+          batchQueue[currentBatchIdx].count = 0;
+          inPacket = true;
+          isLegacyCode = false;
+          emergencyFlag = false;
+          tokenLen = 0;
+          prefixLen = 0;
+          emergencyRxLen = 0;
+          prefixBuf[0] = '\0';
+          tokenBuf[0] = '\0';
+          emergencyRxBuf[0] = '\0';
+          updateRobotState(STATE_RECEIVING);
+          Serial.print(F("[RECV] BATCH:"));
+          Serial.println(currentBatchIdx + 1);
+        }
+        continue;
+      }
+
       if (strstr_P(prefixBuf, PSTR("CODE;")) != NULL || strstr_P(prefixBuf, PSTR("code;")) != NULL) {
+        currentBatchIdx = 0;
+        batchQueue[0].count = 0;
         inPacket = true;
+        isLegacyCode = true;
         emergencyFlag = false;
-        commandCount = 0;
         tokenLen = 0;
         prefixLen = 0;
         emergencyRxLen = 0;
@@ -278,13 +340,20 @@ void loop() {
       }
     } else {
       if (c == ';') {
-        enqueueToken();
+        enqueueBatchToken(currentBatchIdx);
       } else if (c == '\n' || c == '\r') {
-        enqueueToken();
+        enqueueBatchToken(currentBatchIdx);
         inPacket = false;
         prefixLen = 0;
         prefixBuf[0] = '\0';
-        executeCommandQueue();
+        Serial.print(F("[BATCH_LOADED:"));
+        Serial.print(currentBatchIdx + 1);
+        Serial.print(F(",COUNT:"));
+        Serial.print(batchQueue[currentBatchIdx].count);
+        Serial.println(']');
+        if (isLegacyCode) {
+          executeAllBatches();
+        }
         return;
       } else {
         if (tokenLen < sizeof(tokenBuf) - 1) {
@@ -296,11 +365,18 @@ void loop() {
   }
 
   if (inPacket && (millis() - lastRxTime > 350)) {
-    enqueueToken();
+    enqueueBatchToken(currentBatchIdx);
     inPacket = false;
     prefixLen = 0;
     prefixBuf[0] = '\0';
-    executeCommandQueue();
+    Serial.print(F("[BATCH_LOADED:"));
+    Serial.print(currentBatchIdx + 1);
+    Serial.print(F(",COUNT:"));
+    Serial.print(batchQueue[currentBatchIdx].count);
+    Serial.println(']');
+    if (isLegacyCode) {
+      executeAllBatches();
+    }
   }
 }
 
@@ -790,66 +866,53 @@ void executeInstruction(const Instruction& inst) {
   }
 }
 
-void executeCommandQueue() {
-  if (commandCount == 0) return;
+void executeAllBatches() {
   emergencyFlag = false;
   updateRobotState(STATE_EXECUTING);
   LbRGB.fillColor(CRGB::Black);
   LbRGB.show();
-  Serial.print(F("CODE_START:"));
-  Serial.print(commandCount);
-  Serial.print(F(",RAM:"));
+  Serial.print(F("MISSION_START,RAM:"));
   Serial.println(freeRam());
-  for (uint8_t i = 0; i < commandCount; i++) {
-    if (checkEmergency()) break;
-    if (emergencyFlag) break;
-    Serial.print(F("[EXEC] "));
-    Serial.print(i + 1);
-    Serial.print('/');
-    Serial.print(commandCount);
-    Serial.print(' ');
-    printInstructionInfo(commandQueue[i]);
-    Serial.println();
-    executeInstruction(commandQueue[i]);
-    if (i < commandCount - 1) {
-      delay(10);
-    }
-  }
-  commandCount = 0;
-  if (!emergencyFlag) {
-    updateRobotState(STATE_READY);
-    Serial.println(F("BATCH_READY"));
-  }
-}
 
-void processCodePacket(char* payload) {
-  while (*payload == ' ' || *payload == '\t' || *payload == ';') payload++;
-  if (*payload == '\0') return;
-
-  Serial.print(F("[RECV] "));
-  Serial.println(payload);
-  updateRobotState(STATE_RECEIVING);
-  commandCount = 0;
-  char* p = payload;
-
-  while (*p != '\0') {
-    while (*p == ' ' || *p == '\t' || *p == ';') p++;
-    if (*p == '\0') break;
-
-    char* seg = p;
-    while (*p != '\0' && *p != ';') p++;
-    if (*p == ';') {
-      *p = '\0';
-      p++;
+  for (uint8_t b = 0; b < MAX_BATCHES; b++) {
+    if (emergencyFlag || checkEmergency()) break;
+    if (batchQueue[b].count == 0) {
+      break;
     }
 
-    Instruction inst;
-    if (parseInstruction(seg, inst)) {
-      if (commandCount < MAX_COMMANDS) {
-        commandQueue[commandCount++] = inst;
+    Serial.print(F("[START_BATCH] "));
+    Serial.print(b + 1);
+    Serial.print(F(",CMDS:"));
+    Serial.println(batchQueue[b].count);
+
+    for (uint8_t i = 0; i < batchQueue[b].count; i++) {
+      if (emergencyFlag || checkEmergency()) break;
+
+      Serial.print(F("[EXEC] B"));
+      Serial.print(b + 1);
+      Serial.print(' ');
+      Serial.print(i + 1);
+      Serial.print('/');
+      Serial.print(batchQueue[b].count);
+      Serial.print(' ');
+      printInstructionInfo(batchQueue[b].commands[i]);
+      Serial.println();
+
+      executeInstruction(batchQueue[b].commands[i]);
+
+      if (i < batchQueue[b].count - 1) {
+        delay(10);
       }
     }
+
+    if (emergencyFlag) break;
+
+    Serial.print(F("[BATCH_DONE] "));
+    Serial.println(b + 1);
   }
 
-  executeCommandQueue();
+  if (!emergencyFlag) {
+    updateRobotState(STATE_READY);
+    Serial.println(F("[MISSION_DONE]"));
+  }
 }

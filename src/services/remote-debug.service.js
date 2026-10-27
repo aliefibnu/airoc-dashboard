@@ -113,9 +113,33 @@ class RemoteDebugService {
       const raw = localStorage.getItem(STORAGE_KEY_STATE);
       if (raw) {
         const parsed = JSON.parse(raw);
+        let batches = Array(10).fill("");
+        if (Array.isArray(parsed.batches) && parsed.batches.length === 10) {
+          batches = parsed.batches.map((b) => String(b || ""));
+        } else if (parsed.instructionString) {
+          const tokens = String(parsed.instructionString)
+            .split(";")
+            .map((t) => t.trim())
+            .filter(Boolean);
+          for (let i = 0; i < 10; i++) {
+            batches[i] = tokens.slice(i * 12, (i + 1) * 12).join(";");
+          }
+        }
+        const activeBatchIndex =
+          typeof parsed.activeBatchIndex === "number" &&
+          parsed.activeBatchIndex >= 0 &&
+          parsed.activeBatchIndex < 10
+            ? parsed.activeBatchIndex
+            : 0;
+
+        const currentString = batches[activeBatchIndex] || "";
+        const instructions = this.parseInstructionString(currentString);
+
         return {
-          instructionString: parsed.instructionString || "",
-          instructions: Array.isArray(parsed.instructions) ? parsed.instructions : [],
+          batches,
+          activeBatchIndex,
+          instructionString: currentString,
+          instructions,
           history: Array.isArray(parsed.history) ? parsed.history : [],
           lastUpdated: parsed.lastUpdated || null,
         };
@@ -124,6 +148,8 @@ class RemoteDebugService {
       console.error(e);
     }
     return {
+      batches: Array(10).fill(""),
+      activeBatchIndex: 0,
       instructionString: "",
       instructions: [],
       history: [],
@@ -133,9 +159,24 @@ class RemoteDebugService {
 
   saveState(state) {
     try {
+      const batches =
+        Array.isArray(state.batches) && state.batches.length === 10
+          ? state.batches
+          : Array(10).fill("");
+      const activeBatchIndex =
+        typeof state.activeBatchIndex === "number" &&
+        state.activeBatchIndex >= 0 &&
+        state.activeBatchIndex < 10
+          ? state.activeBatchIndex
+          : 0;
+      const currentString = batches[activeBatchIndex] || "";
+      const instructions = state.instructions || this.parseInstructionString(currentString);
+
       const normalizedState = {
-        instructionString: state.instructionString || "",
-        instructions: state.instructions || [],
+        batches,
+        activeBatchIndex,
+        instructionString: currentString,
+        instructions,
         history: state.history || [],
         lastUpdated: new Date().toISOString(),
       };
@@ -148,20 +189,59 @@ class RemoteDebugService {
     }
   }
 
-  updateState(updater) {
-    const current = this.readState();
-    const updated = typeof updater === "function" ? updater(current) : { ...current, ...updater };
-    return this.saveState(updated);
+  getAllBatches() {
+    return [...this.readState().batches];
   }
 
-  clearState() {
-    const emptyState = {
+  getActiveBatchIndex() {
+    return this.readState().activeBatchIndex;
+  }
+
+  setActiveBatchIndex(index) {
+    const safeIdx = Math.max(0, Math.min(9, Number(index) || 0));
+    const currentState = this.readState();
+    const currentString = currentState.batches[safeIdx] || "";
+    const instructions = this.parseInstructionString(currentString);
+
+    return this.saveState({
+      ...currentState,
+      activeBatchIndex: safeIdx,
+      instructionString: currentString,
+      instructions,
+    });
+  }
+
+  getBatchInstructionString(index) {
+    const safeIdx = Math.max(0, Math.min(9, Number(index) || 0));
+    return this.readState().batches[safeIdx] || "";
+  }
+
+  setBatchInstructionString(index, rawString) {
+    const safeIdx = Math.max(0, Math.min(9, Number(index) || 0));
+    const currentState = this.readState();
+    const batches = [...currentState.batches];
+    batches[safeIdx] = String(rawString || "").trim();
+
+    return this.saveState({
+      ...currentState,
+      batches,
+      instructionString: batches[currentState.activeBatchIndex] || "",
+      instructions: this.parseInstructionString(batches[currentState.activeBatchIndex] || ""),
+    });
+  }
+
+  clearBatch(index) {
+    return this.setBatchInstructionString(index, "");
+  }
+
+  clearAllBatches() {
+    const currentState = this.readState();
+    return this.saveState({
+      ...currentState,
+      batches: Array(10).fill(""),
       instructionString: "",
       instructions: [],
-      history: [],
-      lastUpdated: new Date().toISOString(),
-    };
-    return this.saveState(emptyState);
+    });
   }
 
   addInstruction(nameOrLabel, params = []) {
@@ -181,69 +261,57 @@ class RemoteDebugService {
     };
 
     const currentState = this.readState();
-    const updatedInstructions = [...currentState.instructions, instructionItem];
+    let targetIdx = currentState.activeBatchIndex;
+    const batches = [...currentState.batches];
+
+    let tokens = batches[targetIdx]
+      ? batches[targetIdx].split(";").map((t) => t.trim()).filter(Boolean)
+      : [];
+
+    if (tokens.length >= 12) {
+      let foundSlot = -1;
+      for (let next = targetIdx + 1; next < 10; next++) {
+        const nextTokens = batches[next]
+          ? batches[next].split(";").map((t) => t.trim()).filter(Boolean)
+          : [];
+        if (nextTokens.length < 12) {
+          foundSlot = next;
+          break;
+        }
+      }
+      if (foundSlot === -1) {
+        for (let prev = 0; prev < targetIdx; prev++) {
+          const prevTokens = batches[prev]
+            ? batches[prev].split(";").map((t) => t.trim()).filter(Boolean)
+            : [];
+          if (prevTokens.length < 12) {
+            foundSlot = prev;
+            break;
+          }
+        }
+      }
+
+      if (foundSlot !== -1) {
+        targetIdx = foundSlot;
+        tokens = batches[targetIdx]
+          ? batches[targetIdx].split(";").map((t) => t.trim()).filter(Boolean)
+          : [];
+      } else {
+        return currentState;
+      }
+    }
+
+    tokens.push(formatted);
+    batches[targetIdx] = tokens.join(";");
+
     const updatedHistory = [instructionItem, ...currentState.history];
-    const updatedString = this.formatInstructions(updatedInstructions);
 
     return this.saveState({
-      instructionString: updatedString,
-      instructions: updatedInstructions,
+      batches,
+      activeBatchIndex: targetIdx,
+      instructionString: batches[targetIdx],
+      instructions: this.parseInstructionString(batches[targetIdx]),
       history: updatedHistory,
-    });
-  }
-
-  updateInstruction(index, newParams) {
-    const currentState = this.readState();
-    if (index < 0 || index >= currentState.instructions.length) {
-      return currentState;
-    }
-
-    const target = { ...currentState.instructions[index] };
-    const cleanParams = this.normalizeParams(newParams);
-    target.params = cleanParams;
-    target.formatted = this.formatSingleInstruction(target.alias, cleanParams);
-
-    const updatedInstructions = [...currentState.instructions];
-    updatedInstructions[index] = target;
-    const updatedString = this.formatInstructions(updatedInstructions);
-
-    return this.saveState({
-      ...currentState,
-      instructions: updatedInstructions,
-      instructionString: updatedString,
-    });
-  }
-
-  removeInstruction(index) {
-    const currentState = this.readState();
-    if (index < 0 || index >= currentState.instructions.length) {
-      return currentState;
-    }
-
-    const updatedInstructions = currentState.instructions.filter((_, i) => i !== index);
-    const updatedString = this.formatInstructions(updatedInstructions);
-
-    return this.saveState({
-      ...currentState,
-      instructions: updatedInstructions,
-      instructionString: updatedString,
-    });
-  }
-
-  undo() {
-    const currentState = this.readState();
-    if (currentState.instructions.length === 0) {
-      return currentState;
-    }
-    return this.removeInstruction(currentState.instructions.length - 1);
-  }
-
-  clearInstructions() {
-    const currentState = this.readState();
-    return this.saveState({
-      ...currentState,
-      instructions: [],
-      instructionString: "",
     });
   }
 
@@ -252,15 +320,8 @@ class RemoteDebugService {
   }
 
   setInstructionString(rawString) {
-    const cleanStr = String(rawString || "").trim();
-    const parsedInstructions = this.parseInstructionString(cleanStr);
     const currentState = this.readState();
-
-    return this.saveState({
-      ...currentState,
-      instructions: parsedInstructions,
-      instructionString: cleanStr,
-    });
+    return this.setBatchInstructionString(currentState.activeBatchIndex, rawString);
   }
 
   getInstructions() {
@@ -277,11 +338,6 @@ class RemoteDebugService {
       ...currentState,
       history: [],
     });
-  }
-
-  getPayloadBuffer() {
-    const str = this.getInstructionString();
-    return new TextEncoder().encode(str);
   }
 
   subscribe(listener) {

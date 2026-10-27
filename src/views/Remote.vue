@@ -82,14 +82,76 @@
     <div
       class="border-4 border-black bg-yellow-50 p-6 md:p-8 rounded-3xl shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] space-y-4"
     >
-      <textarea
-        v-model="manualInstructionString"
-        @input="onManualInstructionChange"
-        @change="onManualInstructionChange"
-        rows="3"
-        placeholder="KETIK ATAU KONFIRMASI TOMBOL DI BAWAH (CONTOH: SPEED:5;MAJU:10;BELOK_KANAN:90;FOLLOW_LINE:1;CAPIT;BUNYI:2;END)..."
-        class="w-full font-mono text-base md:text-lg font-black bg-white border-4 border-black p-4 rounded-2xl shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] focus:outline-none focus:bg-yellow-100 select-text"
-      ></textarea>
+      <div class="space-y-3">
+        <div class="flex flex-wrap items-center justify-between gap-2">
+          <div class="flex items-center gap-2">
+            <span class="font-black text-sm md:text-base uppercase tracking-wider">
+              PILIH BATCH MISI (1 - 10)
+            </span>
+            <span class="text-xs font-mono font-bold bg-white px-2 py-0.5 rounded border-2 border-black">
+              AKTIF: BATCH {{ activeBatchIndex + 1 }}
+            </span>
+          </div>
+
+          <button
+            type="button"
+            @click="clearAllBatches"
+            class="font-black text-xs uppercase bg-red-100 hover:bg-red-200 text-red-900 border-2 border-black px-2.5 py-1 rounded-lg cursor-pointer transition-colors shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] active:translate-y-0.5 active:shadow-none"
+          >
+            RESET SEMUA BATCH
+          </button>
+        </div>
+
+        <div class="grid grid-cols-5 sm:grid-cols-10 gap-2">
+          <button
+            v-for="bNum in 10"
+            :key="bNum"
+            type="button"
+            @click="selectBatch(bNum - 1)"
+            class="py-2 px-1 sm:px-2 rounded-xl border-3 border-black text-center font-black transition-all cursor-pointer flex flex-col items-center justify-center gap-0.5 select-none"
+            :class="
+              activeBatchIndex === bNum - 1
+                ? 'bg-yellow-400 text-black shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] -translate-y-0.5'
+                : getBatchCount(bNum - 1) > 0
+                  ? 'bg-green-100 text-black border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:bg-green-200'
+                  : 'bg-white text-gray-400 border-gray-400 hover:bg-gray-100 hover:text-black'
+            "
+          >
+            <span class="text-xs uppercase tracking-tight">B{{ bNum }}</span>
+            <span
+              class="text-[10px] font-mono font-bold"
+              :class="getBatchCount(bNum - 1) >= 12 ? 'text-red-600 font-black' : ''"
+            >
+              {{ getBatchCount(bNum - 1) }}/12
+            </span>
+          </button>
+        </div>
+      </div>
+
+      <div class="space-y-2">
+        <div class="flex items-center justify-between">
+          <span class="font-black text-xs md:text-sm uppercase text-gray-700">
+            KUMPULAN KODE BATCH {{ activeBatchIndex + 1 }} (MAKSIMAL 12 KODE PER BATCH)
+          </span>
+          <button
+            v-if="currentBatchString.length > 0"
+            type="button"
+            @click="clearCurrentBatch"
+            class="text-xs font-black uppercase text-red-600 hover:text-red-700 cursor-pointer underline"
+          >
+            KOSONGKAN BATCH INI
+          </button>
+        </div>
+
+        <textarea
+          v-model="currentBatchString"
+          @input="onCurrentBatchInput"
+          @change="onCurrentBatchInput"
+          rows="3"
+          :placeholder="`KETIK ATAU KLIK TOMBOL INSTRUKSI UNTUK BATCH ${activeBatchIndex + 1} (CONTOH: MAJU:10;KANAN:90;CAPIT;END)...`"
+          class="w-full font-mono text-base md:text-lg font-black bg-white border-4 border-black p-4 rounded-2xl shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] focus:outline-none focus:bg-yellow-100 select-text"
+        ></textarea>
+      </div>
 
       <div class="flex flex-wrap items-center justify-between gap-4 pt-2">
         <button
@@ -139,7 +201,7 @@
 </template>
 
 <script setup>
-import { ref, watch, onMounted, onUnmounted } from "vue";
+import { ref, onMounted, onUnmounted } from "vue";
 import { RouterLink } from "vue-router";
 import InstructionButton from "@/components/InstructionButton.vue";
 import remoteDebugService from "@/services/remote-debug.service.js";
@@ -150,7 +212,9 @@ import {
   INSTRUCTION_ALIASES,
 } from "@/data/instruction-aliases.js";
 
-const manualInstructionString = ref("");
+const batchList = ref(Array(10).fill(""));
+const activeBatchIndex = ref(0);
+const currentBatchString = ref("");
 const instructionList = ref([]);
 const isBleConnected = ref(false);
 const connectedDeviceName = ref("");
@@ -165,10 +229,10 @@ onMounted(() => {
   checkBle();
 
   unsubscribeState = remoteDebugService.subscribe((state) => {
-    if (manualInstructionString.value !== state.instructionString) {
-      manualInstructionString.value = state.instructionString;
-    }
-    instructionList.value = state.instructions;
+    batchList.value = state.batches || Array(10).fill("");
+    activeBatchIndex.value = state.activeBatchIndex || 0;
+    currentBatchString.value = batchList.value[activeBatchIndex.value] || "";
+    instructionList.value = state.instructions || [];
   });
 
   removeDisconnectListener = BleService.onDisconnect(() => {
@@ -181,25 +245,42 @@ onUnmounted(() => {
   if (removeDisconnectListener) removeDisconnectListener();
 });
 
-watch(manualInstructionString, (newVal) => {
-  if (newVal !== remoteDebugService.getInstructionString()) {
-    remoteDebugService.setInstructionString(newVal);
-  }
-});
+function refreshState() {
+  const state = remoteDebugService.readState();
+  batchList.value = state.batches || Array(10).fill("");
+  activeBatchIndex.value = state.activeBatchIndex || 0;
+  currentBatchString.value = batchList.value[activeBatchIndex.value] || "";
+  instructionList.value = state.instructions || [];
+}
 
-function onManualInstructionChange(e) {
+function selectBatch(index) {
+  remoteDebugService.setActiveBatchIndex(index);
+}
+
+function getBatchCount(index) {
+  const str = batchList.value[index] || "";
+  if (!str.trim()) return 0;
+  return str
+    .split(";")
+    .map((t) => t.trim())
+    .filter((t) => t.length > 0 && t.toUpperCase() !== "END").length;
+}
+
+function clearCurrentBatch() {
+  remoteDebugService.clearBatch(activeBatchIndex.value);
+}
+
+function clearAllBatches() {
+  remoteDebugService.clearAllBatches();
+}
+
+function onCurrentBatchInput(e) {
   const val = e.target.value;
-  remoteDebugService.setInstructionString(val);
+  remoteDebugService.setBatchInstructionString(activeBatchIndex.value, val);
 }
 
 function getInstructionsByCategory(catId) {
   return INSTRUCTION_ALIASES.filter((item) => item.categoryId === catId);
-}
-
-function refreshState() {
-  const state = remoteDebugService.readState();
-  manualInstructionString.value = state.instructionString;
-  instructionList.value = state.instructions;
 }
 
 function checkBle() {
@@ -241,7 +322,7 @@ async function sendRawBle(cmd) {
   }
   await BleService.sendCommand(cmd);
   lastSentCommand.value = cmd;
-  statusMessage.value = `Berhasil kirim instruksi: ${cmd}`;
+  statusMessage.value = `Berhasil kirim: ${cmd}`;
 }
 
 function resolveInstructionToken(token) {
@@ -300,97 +381,83 @@ async function executeTestInstruction(name, payload) {
 
 let abortBatchExecution = false;
 
-function parseInstructionBatches(rawStr, batchSize = 12) {
-  let cleaned = rawStr.trim();
-  if (cleaned.toUpperCase().startsWith("CODE;")) {
-    cleaned = cleaned.slice(5).trim();
-  }
-  const tokens = cleaned
-    .split(";")
-    .map((t) => t.trim())
-    .filter(
-      (t) =>
-        t.length > 0 &&
-        t.toUpperCase() !== "CODE" &&
-        t.toUpperCase() !== "PROD",
-    )
-    .map((t) => resolveInstructionToken(t));
-
-  if (tokens.length === 0) return [];
-
-  const batches = [];
-  for (let i = 0; i < tokens.length; i += batchSize) {
-    const chunk = tokens.slice(i, i + batchSize);
-    if (
-      !chunk.some(
-        (c) => c.toUpperCase() === "END" || c.toUpperCase() === "STOP",
-      )
-    ) {
-      chunk.push("END");
-    }
-    batches.push(`CODE;${chunk.join(";")}`);
-  }
-  return batches;
-}
-
 async function runProdMission() {
-  const str = manualInstructionString.value.trim();
-  if (!str) {
-    statusMessage.value =
-      "String instruksi kosong! Silakan tambahkan instruksi terlebih dahulu.";
-    return;
-  }
   if (!BleService.isConnected()) {
     statusMessage.value = "Robot BLE belum terhubung!";
     return;
   }
 
-  const batches = parseInstructionBatches(str, 12);
-  if (batches.length === 0) {
-    statusMessage.value = "Tidak ada instruksi yang valid untuk dikirim.";
+  const allBatches = remoteDebugService.getAllBatches();
+  const preparedBatches = [];
+
+  for (let b = 0; b < 10; b++) {
+    const raw = String(allBatches[b] || "").trim();
+    if (!raw) continue;
+    const tokens = raw
+      .split(";")
+      .map((t) => t.trim())
+      .filter(
+        (t) =>
+          t.length > 0 &&
+          t.toUpperCase() !== "END" &&
+          t.toUpperCase() !== "CODE" &&
+          t.toUpperCase() !== "PROD",
+      )
+      .map((t) => resolveInstructionToken(t));
+
+    if (tokens.length > 0) {
+      const chunk = tokens.slice(0, 12);
+      chunk.push("END");
+      preparedBatches.push({
+        batchNum: b + 1,
+        command: `BATCH:${b + 1};${chunk.join(";")}`,
+        count: chunk.length - 1,
+      });
+    }
+  }
+
+  if (preparedBatches.length === 0) {
+    statusMessage.value = "Semua batch kosong! Silakan tambahkan instruksi terlebih dahulu.";
     return;
   }
 
   abortBatchExecution = false;
 
   try {
-    for (let i = 0; i < batches.length; i++) {
+    statusMessage.value = "Mereset variabel batch di robot...";
+    await sendRawBle("CLEAR");
+    await new Promise((r) => setTimeout(r, 120));
+
+    for (const pb of preparedBatches) {
       if (abortBatchExecution) {
-        statusMessage.value = "Eksekusi batch dibatalkan!";
-        break;
+        statusMessage.value = "Pengunggahan batch dibatalkan!";
+        return;
       }
 
-      statusMessage.value =
-        batches.length > 1
-          ? `Mengirim Batch ${i + 1}/${batches.length}...`
-          : "Mengirim instruksi misi...";
+      statusMessage.value = `Mengunggah Batch ${pb.batchNum} (${pb.count} instruksi) ke robot...`;
+      await sendRawBle(pb.command);
 
-      await sendRawBle(batches[i]);
-
-      if (i < batches.length - 1) {
-        statusMessage.value = `Batch ${i + 1}/${batches.length} terkirim. Menunggu robot menyelesaikan batch...`;
-        const res = await BleService.waitForBatchCompletion(180000);
-        if (!res.success) {
-          abortBatchExecution = true;
-          statusMessage.value = `Misi berhenti pada Batch ${i + 1}: ${res.reason}`;
-          break;
-        }
-      } else {
-        statusMessage.value = `Batch terakhir (${i + 1}/${batches.length}) sedang dijalankan robot...`;
-        const res = await BleService.waitForBatchCompletion(180000);
-        if (!res.success && res.reason.includes("Emergency")) {
-          abortBatchExecution = true;
-          statusMessage.value = `Misi dihentikan: ${res.reason}`;
-          break;
-        }
+      const ack = await BleService.waitForAcknowledgment(`[BATCH_LOADED:${pb.batchNum}`, 5000);
+      if (!ack.success) {
+        await new Promise((r) => setTimeout(r, 150));
       }
     }
 
-    if (!abortBatchExecution) {
-      statusMessage.value =
-        batches.length > 1
-          ? `Semua ${batches.length} batch misi berhasil dikirim dan selesai!`
-          : "Instruksi misi berhasil dikirim ke robot!";
+    if (abortBatchExecution) {
+      statusMessage.value = "Pengunggahan batch dibatalkan!";
+      return;
+    }
+
+    statusMessage.value = `Semua ${preparedBatches.length} batch berhasil diterima robot! Memulai eksekusi...`;
+    await sendRawBle("START_MISSION");
+
+    statusMessage.value = "Robot sedang menjalankan seluruh misi dari Batch 1...";
+    const res = await BleService.waitForBatchCompletion(300000);
+
+    if (res.success) {
+      statusMessage.value = "Seluruh instruksi misi berhasil diselesaikan oleh robot!";
+    } else {
+      statusMessage.value = `Misi berhenti: ${res.reason}`;
     }
   } catch (err) {
     statusMessage.value = `Gagal menjalankan misi: ${err.message || err}`;
@@ -401,6 +468,7 @@ async function emergencyStop() {
   abortBatchExecution = true;
   try {
     await sendRawBle("EMERGENCY_STOP");
+    statusMessage.value = "EMERGENCY STOP DIKIRIM! Robot dihentikan dan semua batch direset.";
   } catch (err) {
     statusMessage.value = `Emergency Stop gagal: ${err.message || err}`;
   }

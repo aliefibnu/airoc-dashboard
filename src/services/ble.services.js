@@ -233,7 +233,36 @@ class BleService {
     }
   }
 
-  waitForBatchCompletion(timeoutMs = 180000) {
+  waitForAcknowledgment(expectedPrefix, timeoutMs = 5000) {
+    return new Promise((resolve) => {
+      let timer = null;
+      let unsubscribe = null;
+      let accumulated = "";
+
+      const cleanup = () => {
+        if (timer) clearTimeout(timer);
+        if (unsubscribe) unsubscribe();
+      };
+
+      unsubscribe = this.onData((str) => {
+        accumulated += str;
+        if (accumulated.includes(expectedPrefix)) {
+          cleanup();
+          resolve({ success: true, text: accumulated });
+        } else if (accumulated.includes("EMERGENCY_STOP")) {
+          cleanup();
+          resolve({ success: false, reason: "Emergency Stop terdeteksi" });
+        }
+      });
+
+      timer = setTimeout(() => {
+        cleanup();
+        resolve({ success: false, reason: "Timeout menunggu konfirmasi robot" });
+      }, timeoutMs);
+    });
+  }
+
+  waitForBatchCompletion(timeoutMs = 300000) {
     return new Promise((resolve) => {
       let timer = null;
       let unsubscribe = null;
@@ -248,11 +277,11 @@ class BleService {
       unsubscribe = this.onData((str) => {
         accumulated += str;
         if (
+          accumulated.includes("[MISSION_DONE]") ||
           accumulated.includes("BATCH_READY") ||
-          accumulated.includes("[BATCH_END]") ||
           accumulated.includes("[STATE] READY")
         ) {
-          finish({ success: true });
+          finish({ success: true, text: accumulated });
         } else if (
           accumulated.includes("EMERGENCY_STOP") ||
           accumulated.includes("[STATE] EMG")
@@ -262,7 +291,7 @@ class BleService {
       });
 
       timer = setTimeout(() => {
-        finish({ success: false, reason: "Batas waktu tunggu batch habis (Timeout)" });
+        finish({ success: false, reason: "Batas waktu tunggu misi habis (Timeout)" });
       }, timeoutMs);
     });
   }
