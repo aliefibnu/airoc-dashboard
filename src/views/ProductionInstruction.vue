@@ -120,22 +120,26 @@
         "
       >
         <div
-          class="flex flex-wrap items-center justify-between gap-3 border-b-3 border-black pb-3"
+          class="flex flex-wrap items-center justify-between gap-3 border-b-3 border-black pb-3 select-none"
         >
-          <div class="flex items-center gap-3">
+          <div
+            class="flex items-center gap-3 cursor-pointer group"
+            @dblclick="openBatchInRemote(bNum - 1)"
+            title="Double click untuk buka batch ini di Remote Debugger"
+          >
             <span
-              class="text-base md:text-lg font-black uppercase px-3 py-1 rounded-xl border-2 border-black"
+              class="text-base md:text-lg font-black uppercase px-3 py-1 rounded-xl border-2 border-black group-hover:scale-105 transition-transform"
               :class="
                 !isBatchEnabled(bNum - 1)
                   ? 'bg-gray-400 text-white line-through'
-                  : 'bg-yellow-400 text-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]'
+                  : 'bg-yellow-400 text-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] group-hover:bg-yellow-300'
               "
             >
               BATCH {{ bNum }}
             </span>
 
             <span
-              class="text-xs font-mono font-black px-2.5 py-1 rounded-lg border-2 border-black bg-white"
+              class="text-xs font-mono font-black px-2.5 py-1 rounded-lg border-2 border-black bg-white group-hover:bg-yellow-100 transition-colors"
               :class="
                 getBatchCount(bNum - 1) >= 12
                   ? 'text-red-600'
@@ -187,12 +191,16 @@
             <span
               v-for="(token, tIdx) in getBatchTokens(bNum - 1)"
               :key="tIdx"
-              class="bg-white border-2 border-black px-3 py-1.5 rounded-xl font-mono font-black text-xs md:text-sm shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] inline-flex items-center gap-1.5"
-              :class="
+              @dblclick="selectStartFromInstruction(bNum, tIdx + 1)"
+              title="Double click untuk set start dari instruksi ini"
+              class="bg-white border-2 border-black px-3 py-1.5 rounded-xl font-mono font-black text-xs md:text-sm shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] inline-flex items-center gap-1.5 cursor-pointer hover:bg-yellow-300 hover:scale-105 active:scale-95 transition-all"
+              :class="[
                 !isBatchEnabled(bNum - 1)
                   ? 'text-gray-400 line-through opacity-60'
-                  : 'text-black'
-              "
+                  : selectedStartBatch === bNum && selectedStartInst === tIdx + 1
+                    ? 'bg-blue-100 border-blue-600 ring-2 ring-blue-600 text-blue-900 shadow-[3px_3px_0px_0px_rgba(37,99,235,1)]'
+                    : 'text-black'
+              ]"
             >
               <span class="text-gray-500 text-[10px]">#{{ tIdx + 1 }}</span>
               <span>{{ token }}</span>
@@ -233,6 +241,7 @@
               <div class="space-y-1">
                 <select
                   v-model.number="selectedStartBatch"
+                  @change="onBatchSelectChange"
                   class="w-full bg-yellow-50 border-3 border-black rounded-xl p-2.5 text-sm font-black font-mono focus:outline-none focus:bg-white shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] cursor-pointer uppercase"
                 >
                   <option v-for="bNum in 10" :key="bNum" :value="bNum">
@@ -266,6 +275,7 @@
           </div>
 
           <button
+            ref="specificStartButtonRef"
             type="button"
             :disabled="
               isExecuting || availableInstructionsForSelectedBatch.length === 0
@@ -289,10 +299,13 @@
 </template>
 
 <script setup>
-import { ref, computed, watch, onMounted, onUnmounted } from "vue";
-import { RouterLink } from "vue-router";
+import { ref, computed, nextTick, onMounted, onUnmounted } from "vue";
+import { RouterLink, useRouter } from "vue-router";
 import remoteDebugService from "@/services/remote-debug.service.js";
 import BleService from "@/services/ble.services.js";
+
+const router = useRouter();
+const specificStartButtonRef = ref(null);
 
 const batchList = ref(Array(10).fill(""));
 const batchesEnabled = ref(Array(10).fill(true));
@@ -413,9 +426,27 @@ const availableInstructionsForSelectedBatch = computed(() => {
   }));
 });
 
-watch(selectedStartBatch, () => {
+function openBatchInRemote(index) {
+  remoteDebugService.setActiveBatchIndex(index);
+  router.push("/remote");
+}
+
+function selectStartFromInstruction(batchNum, instNum) {
+  selectedStartBatch.value = batchNum;
+  selectedStartInst.value = instNum;
+  nextTick(() => {
+    if (specificStartButtonRef.value) {
+      specificStartButtonRef.value.scrollIntoView({
+        behavior: "smooth",
+        block: "center",
+      });
+    }
+  });
+}
+
+function onBatchSelectChange() {
   selectedStartInst.value = 1;
-});
+}
 
 async function sendRawBle(cmd) {
   if (!BleService.isConnected()) {

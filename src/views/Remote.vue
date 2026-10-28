@@ -210,7 +210,6 @@
             @click="runProdMission"
             class="bg-green-500 text-black font-black uppercase text-sm md:text-base py-3.5 px-5 rounded-xl border-4 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:bg-green-400 active:translate-y-1 active:shadow-none transition-all cursor-pointer flex items-center gap-2"
           >
-            <span>🧪</span>
             <h3>TEST PRODUCTION INSTRUCTION</h3>
           </button>
 
@@ -219,7 +218,6 @@
             @click="goToProductionArea"
             class="bg-yellow-400 text-black font-black uppercase text-sm md:text-base py-3.5 px-5 rounded-xl border-4 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:bg-yellow-300 active:translate-y-1 active:shadow-none transition-all cursor-pointer flex items-center gap-2"
           >
-            <span>🚀</span>
             <h3>START PRODUCTION INSTRUCTION</h3>
           </button>
         </div>
