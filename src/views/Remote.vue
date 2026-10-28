@@ -204,18 +204,30 @@
       </div>
 
       <div class="flex flex-wrap items-center justify-between gap-4 pt-2">
-        <button
-          type="button"
-          @click="runProdMission"
-          class="bg-green-500 text-black font-black uppercase text-base md:text-lg py-3.5 px-6 rounded-xl border-4 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:bg-green-400 active:translate-y-1 active:shadow-none transition-all cursor-pointer flex items-center gap-2"
-        >
-          <h3>JALANKAN MISI</h3>
-        </button>
+        <div class="flex flex-wrap items-center gap-3">
+          <button
+            type="button"
+            @click="runProdMission"
+            class="bg-green-500 text-black font-black uppercase text-sm md:text-base py-3.5 px-5 rounded-xl border-4 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:bg-green-400 active:translate-y-1 active:shadow-none transition-all cursor-pointer flex items-center gap-2"
+          >
+            <span>🧪</span>
+            <h3>TEST PRODUCTION INSTRUCTION</h3>
+          </button>
+
+          <button
+            type="button"
+            @click="goToProductionArea"
+            class="bg-yellow-400 text-black font-black uppercase text-sm md:text-base py-3.5 px-5 rounded-xl border-4 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:bg-yellow-300 active:translate-y-1 active:shadow-none transition-all cursor-pointer flex items-center gap-2"
+          >
+            <span>🚀</span>
+            <h3>START PRODUCTION INSTRUCTION</h3>
+          </button>
+        </div>
 
         <button
           type="button"
           @click="emergencyStop"
-          class="bg-red-600 text-white font-black uppercase text-base md:text-lg py-3.5 px-6 rounded-xl border-4 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:bg-red-700 active:translate-y-1 active:shadow-none transition-all cursor-pointer flex items-center gap-2"
+          class="bg-red-600 text-white font-black uppercase text-sm md:text-base py-3.5 px-5 rounded-xl border-4 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:bg-red-700 active:translate-y-1 active:shadow-none transition-all cursor-pointer flex items-center gap-2"
         >
           <span>🛑</span>
           <h3>EMERGENCY STOP</h3>
@@ -327,7 +339,7 @@
 
 <script setup>
 import { ref, computed, onMounted, onUnmounted } from "vue";
-import { RouterLink } from "vue-router";
+import { RouterLink, useRouter } from "vue-router";
 import InstructionButton from "@/components/InstructionButton.vue";
 import remoteDebugService from "@/services/remote-debug.service.js";
 import BleService from "@/services/ble.services.js";
@@ -349,6 +361,12 @@ const lastSentCommand = ref("");
 const isImportModalOpen = ref(false);
 const importJsonText = ref("");
 const importErrorMessage = ref("");
+
+const router = useRouter();
+
+function goToProductionArea() {
+  router.push("/production");
+}
 
 let unsubscribeState = null;
 let removeDisconnectListener = null;
@@ -584,37 +602,7 @@ async function runProdMission() {
     return;
   }
 
-  const allBatches = remoteDebugService.getAllBatches();
-  const preparedBatches = [];
-
-  for (let b = 0; b < 10; b++) {
-    if (!remoteDebugService.isBatchEnabled(b)) {
-      continue;
-    }
-    const raw = String(allBatches[b] || "").trim();
-    if (!raw) continue;
-    const tokens = raw
-      .split(";")
-      .map((t) => t.trim())
-      .filter(
-        (t) =>
-          t.length > 0 &&
-          t.toUpperCase() !== "END" &&
-          t.toUpperCase() !== "CODE" &&
-          t.toUpperCase() !== "PROD",
-      )
-      .map((t) => resolveInstructionToken(t));
-
-    if (tokens.length > 0) {
-      const chunk = tokens.slice(0, 12);
-      chunk.push("END");
-      preparedBatches.push({
-        batchNum: b + 1,
-        command: `BATCH:${b + 1};${chunk.join(";")}`,
-        count: chunk.length - 1,
-      });
-    }
-  }
+  const preparedBatches = remoteDebugService.getPreparedBatches();
 
   if (preparedBatches.length === 0) {
     statusMessage.value =

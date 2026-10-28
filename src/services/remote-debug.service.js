@@ -1,4 +1,5 @@
 import { INSTRUCTION_ALIASES } from "@/data/instruction-aliases.js";
+import instructionDefaultsService from "@/services/instruction-defaults.service.js";
 
 const STORAGE_KEY_STATE = "airoc_remote_debug_state";
 
@@ -73,6 +74,94 @@ class RemoteDebugService {
         return this.formatSingleInstruction(alias, item.params);
       })
       .join(";");
+  }
+
+  resolveInstructionToken(token) {
+    const trimmed = String(token || "").trim();
+    if (!trimmed) return "";
+    const colonIdx = trimmed.indexOf(":");
+    let cmd = trimmed;
+    let paramPart = "";
+    if (colonIdx !== -1) {
+      cmd = trimmed.slice(0, colonIdx).trim().toUpperCase();
+      paramPart = trimmed.slice(colonIdx + 1).trim();
+    } else {
+      cmd = trimmed.toUpperCase();
+    }
+
+    if (paramPart.length > 0) {
+      return `${cmd}:${paramPart}`;
+    }
+
+    const defs = instructionDefaultsService.getAllDefaults();
+    const defForCmd = defs[cmd];
+    if (defForCmd && typeof defForCmd === "object") {
+      const vals = Object.values(defForCmd).filter(
+        (v) => v !== undefined && v !== null && v !== "",
+      );
+      if (vals.length > 0) {
+        return `${cmd}:${vals.join(",")}`;
+      }
+    }
+
+    const action = this.findActionByAlias(cmd);
+    if (action && Array.isArray(action.params) && action.params.length > 0) {
+      const defaultVals = action.params
+        .map((p) => p.defaultValue)
+        .filter((v) => v !== undefined && v !== null && v !== "");
+      if (defaultVals.length > 0) {
+        return `${cmd}:${defaultVals.join(",")}`;
+      }
+    }
+
+    return cmd;
+  }
+
+  getPreparedBatches(startBatchNum = 1, startInstNum = 1) {
+    const allBatches = this.getAllBatches();
+    const preparedBatches = [];
+    const minBatch = Math.max(1, Math.min(10, Number(startBatchNum) || 1));
+    const minInst = Math.max(1, Number(startInstNum) || 1);
+
+    for (let b = 0; b < 10; b++) {
+      const bNum = b + 1;
+      if (bNum < minBatch) {
+        continue;
+      }
+      if (!this.isBatchEnabled(b)) {
+        continue;
+      }
+      const raw = String(allBatches[b] || "").trim();
+      if (!raw) continue;
+      let tokens = raw
+        .split(";")
+        .map((t) => t.trim())
+        .filter(
+          (t) =>
+            t.length > 0 &&
+            t.toUpperCase() !== "END" &&
+            t.toUpperCase() !== "CODE" &&
+            t.toUpperCase() !== "PROD",
+        )
+        .map((t) => this.resolveInstructionToken(t));
+
+      if (bNum === minBatch && minInst > 1) {
+        tokens = tokens.slice(minInst - 1);
+      }
+
+      if (tokens.length > 0) {
+        const chunk = tokens.slice(0, 12);
+        chunk.push("END");
+        preparedBatches.push({
+          batchNum: bNum,
+          batchIndex: b,
+          command: `BATCH:${bNum};${chunk.join(";")}`,
+          count: chunk.length - 1,
+          tokens: chunk.slice(0, -1),
+        });
+      }
+    }
+    return preparedBatches;
   }
 
   parseInstructionString(rawString) {

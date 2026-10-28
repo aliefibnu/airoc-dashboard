@@ -20,6 +20,12 @@ const router = createRouter({
       component: () => import("../views/Remote.vue"),
     },
     {
+      path: "/production",
+      alias: ["/production-instruction", "/prod-instruction"],
+      name: "production-instruction",
+      component: () => import("../views/ProductionInstruction.vue"),
+    },
+    {
       path: "/default-settings",
       alias: "/settings",
       name: "default-settings",
