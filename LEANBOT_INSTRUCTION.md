@@ -38,12 +38,13 @@ CODE;MAJU:10,5;END
 ### Aturan Protokol Transmisi:
 1. **Sistem Multi-Batch (Batch 1 - 10)**: Robot menyimpan instruksi di variabel array batch 1 sampai 10 (masing-masing maksimal 12 instruksi).
 2. **Await All Instructions**: Seluruh batch dikirim dan disimpan ke variabel robot terlebih dahulu sebelum robot mulai bergerak.
-3. **Mulai Eksekusi (`START_MISSION`)**: Robot mengeksekusi instruksi dari variabel Batch 1. Setelah selesai, robot memeriksa apakah Batch 2 memiliki instruksi; jika ya, dijalankan; jika kosong, berhenti. Proses ini berlanjut berurutan hingga Batch 10.
-4. **Pemisah Antar Instruksi (`;`)**: Tanda titik koma memisahkan instruksi dalam batch.
-5. **Pemisah Perintah dan Parameter (`:`)**: Tanda titik dua memisahkan nama perintah dan parameternya.
-6. **Reset Darurat (`EMERGENCY_STOP`)**: Menghentikan motor seketika dan mereset/mengosongkan seluruh variabel Batch 1 - 10 sehingga robot langsung bersih dan siap menerima instruksi baru.
-6. **Non-Blocking Serial Emergency Interruption**: Selama misi berlangsung, robot secara periodik membaca UART stream sehingga perintah `EMERGENCY_STOP` atau `STOP` dapat langsung membatalkan eksekusi gerakan seketika.
-7. **Tombol Sentuh**: Tombol fisik sentuh `TB1A` hanya digunakan khusus untuk kalibrasi manual sensor infrared garis (`KALIBRASI`).
+3. **Mulai Eksekusi (`START_MISSION`)**: Robot mengeksekusi instruksi dari variabel Batch 1. Setelah selesai, robot memeriksa apakah Batch berikutnya memiliki instruksi; jika ya, dijalankan; jika kosong/dilewati, melanjutkan ke batch berikutnya hingga Batch 10.
+4. **Pembersihan Otomatis Pasca Eksekusi**: Setelah seluruh instruksi dalam semua batch selesai dijalankan (atau dibatalkan), robot secara otomatis mereset seluruh variabel Batch 1 - 10 ke 0 agar tidak ada instruksi/batch yang tertinggal di memori robot untuk misi berikutnya.
+5. **Pemisah Antar Instruksi (`;`)**: Tanda titik koma memisahkan instruksi dalam batch.
+6. **Pemisah Perintah dan Parameter (`:`)**: Tanda titik dua memisahkan nama perintah dan parameternya.
+7. **Reset Darurat (`EMERGENCY_STOP`)**: Menghentikan motor seketika dan mereset/mengosongkan seluruh variabel Batch 1 - 10 sehingga robot langsung bersih dan siap menerima instruksi baru.
+8. **Non-Blocking Serial Emergency Interruption**: Selama misi berlangsung, robot secara periodik membaca UART stream sehingga perintah `EMERGENCY_STOP` atau `STOP` dapat langsung membatalkan eksekusi gerakan seketika.
+9. **Tombol Sentuh**: Tombol fisik sentuh `TB1A` hanya digunakan khusus untuk kalibrasi manual sensor infrared garis (`KALIBRASI`).
 
 ---
 
@@ -52,7 +53,7 @@ CODE;MAJU:10,5;END
 > [!NOTE]
 > Perbedaan **Rotate** vs **Belok (Pivot)**:
 > - **Rotate (`KANAN`/`KIRI`)**: Poros rotasi berada tepat di tengah robot (roda kiri dan roda kanan berputar berlawanan arah).
-> - **Belok (`BELOK_KANAN`/`BELOK_KIRI`)**: Poros rotasi berada di salah satu ban. Pada `BELOK_KANAN`, ban kanan diam (0) dan ban kiri bergerak maju (`+spd`). Pada `BELOK_KIRI`, ban kiri diam (0) dan ban kanan bergerak maju (`+spd`).
+> - **Belok (`BELOK_KANAN`/`BELOK_KIRI`)**: Poros rotasi berada di salah satu ban. Pada `BELOK_KANAN`, ban kanan diam (0) dan ban kiri bergerak (maju `+spd` pada mode `MAJU` atau mundur `-spd` pada mode `MUNDUR`). Pada `BELOK_KIRI`, ban kiri diam (0) dan ban kanan bergerak (maju `+spd` pada mode `MAJU` atau mundur `-spd` pada mode `MUNDUR`).
 
 | Instruksi | Parameter | Fungsi |
 | --------- | --------- | ------ |
@@ -60,8 +61,8 @@ CODE;MAJU:10,5;END
 | `MUNDUR` | `cm[,speed]` | Bergerak mundur sejauh jarak tertentu (default 10 cm, speed mengikuti kecepatan global) |
 | `KANAN` | `deg[,speed]` | Rotate di tempat ke kanan poros tengah (default 90°) |
 | `KIRI` | `deg[,speed]` | Rotate di tempat ke kiri poros tengah (default 90°) |
-| `BELOK_KANAN` | `deg[,speed]` | Belok ke kanan dengan poros pada ban kanan (default 90°) |
-| `BELOK_KIRI` | `deg[,speed]` | Belok ke kiri dengan poros pada ban kiri (default 90°) |
+| `BELOK_KANAN` | `deg[,speed][,mode]` | Belok ke kanan poros ban kanan (default 90°, mode: `MAJU` / `MUNDUR`) |
+| `BELOK_KIRI` | `deg[,speed][,mode]` | Belok ke kiri poros ban kiri (default 90°, mode: `MAJU` / `MUNDUR`) |
 | `STOP` | — | Menghentikan semua gerakan motor stepper seketika |
 | `SPEED` | `level` | Mengatur kecepatan motor global (level 1-10 dipetakan ke 400-2000 steps/s) |
 | `TUNGGU` | `ms` | Menunda eksekusi instruksi berikutnya selama durasi tertentu (ms) |
@@ -97,7 +98,7 @@ CODE;MAJU:10,5;END
 
 | Instruksi | Parameter | Fungsi |
 | --------- | --------- | ------ |
-| `FOLLOW_LINE` | `jumlah_simpangan[,speed]` | Mengikuti garis hitam menggunakan 4-channel IR line sensor hingga mencapai persimpangan (default 1 simpangan) |
+| `FOLLOW_LINE` | `jumlah_simpangan[,speed][,mode]` | Mengikuti garis hitam menggunakan 4-channel IR line sensor hingga persimpangan (default 1 simpangan, mode: `MAJU` / `MUNDUR`) |
 | `MAJU_LINE` | `max_cm[,speed]` | Bergerak maju hingga garis terdeteksi (default 50 cm) |
 | `MUNDUR_LINE` | `max_cm[,speed]` | Bergerak mundur hingga garis terdeteksi (default 50 cm) |
 | `STOP_LINE` | — | Menghentikan mode line follower dan mematikan motor |

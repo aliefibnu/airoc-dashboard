@@ -314,7 +314,10 @@ function getInputMode(param) {
 
 function initInputValues() {
   configuredParams.value.forEach((p) => {
-    inputValues[p.name] = "";
+    inputValues[p.name] =
+      p.defaultValue !== undefined && p.defaultValue !== null
+        ? p.defaultValue
+        : "";
   });
 }
 

@@ -105,7 +105,22 @@
                 </span>
               </div>
 
+              <select
+                v-if="p.type === 'select' || (p.options && p.options.length > 0)"
+                v-model="editForm[item.alias][p.name]"
+                class="w-full bg-yellow-50 border-3 border-black rounded-xl p-2.5 text-base font-black font-mono focus:outline-none focus:bg-white shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] transition-colors cursor-pointer uppercase"
+              >
+                <option
+                  v-for="opt in p.options"
+                  :key="typeof opt === 'object' ? opt.value : opt"
+                  :value="typeof opt === 'object' ? opt.value : opt"
+                >
+                  {{ typeof opt === 'object' ? opt.label : opt }}
+                </option>
+              </select>
+
               <input
+                v-else
                 v-model="editForm[item.alias][p.name]"
                 :type="p.type || 'text'"
                 :inputmode="

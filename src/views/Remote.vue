@@ -84,6 +84,24 @@
     >
       <div class="space-y-3">
         <div class="flex flex-wrap items-center justify-between gap-2">
+          <div class="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              @click="exportBatchesJson"
+              class="font-black text-xs uppercase bg-blue-100 hover:bg-blue-200 text-blue-900 border-2 border-black px-3 py-1.5 rounded-lg cursor-pointer transition-colors shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] active:translate-y-0.5 active:shadow-none flex items-center gap-1.5"
+            >
+              <span>EKSPOR INSTRUKSI</span>
+            </button>
+
+            <button
+              type="button"
+              @click="openImportModal"
+              class="font-black text-xs uppercase bg-purple-100 hover:bg-purple-200 text-purple-900 border-2 border-black px-3 py-1.5 rounded-lg cursor-pointer transition-colors shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] active:translate-y-0.5 active:shadow-none flex items-center gap-1.5"
+            >
+              <span>IMPOR INSTRUKSI</span>
+            </button>
+          </div>
+
           <button
             type="button"
             @click="clearAllBatches"
@@ -99,20 +117,39 @@
             :key="bNum"
             type="button"
             @click="selectBatch(bNum - 1)"
-            class="py-2 px-1 sm:px-2 rounded-xl border-3 border-black text-center font-black transition-all cursor-pointer flex flex-col items-center justify-center gap-0.5 select-none"
-            :class="
-              activeBatchIndex === bNum - 1
-                ? 'bg-yellow-400 text-black shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] -translate-y-0.5'
-                : getBatchCount(bNum - 1) > 0
-                  ? 'bg-green-100 text-black border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:bg-green-200'
-                  : 'bg-white text-gray-400 border-gray-400 hover:bg-gray-100 hover:text-black'
-            "
+            class="py-2 px-1 sm:px-2 rounded-xl border-3 text-center font-black transition-all cursor-pointer flex flex-col items-center justify-center gap-0.5 select-none relative"
+            :class="[
+              !isBatchEnabled(bNum - 1)
+                ? 'opacity-60 bg-gray-200 text-gray-500 border-gray-500'
+                : activeBatchIndex === bNum - 1
+                  ? 'bg-yellow-400 text-black border-black shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] -translate-y-0.5'
+                  : getBatchCount(bNum - 1) > 0
+                    ? 'bg-green-100 text-black border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:bg-green-200'
+                    : 'bg-white text-gray-400 border-gray-400 hover:bg-gray-100 hover:text-black',
+            ]"
           >
-            <span class="text-xs uppercase tracking-tight">B{{ bNum }}</span>
+            <div class="flex items-center gap-1">
+              <span
+                class="text-xs uppercase tracking-tight"
+                :class="
+                  !isBatchEnabled(bNum - 1) ? 'line-through text-red-600' : ''
+                "
+                >B{{ bNum }}</span
+              >
+              <span
+                v-if="!isBatchEnabled(bNum - 1)"
+                class="text-[9px] font-black text-red-600"
+                >✕</span
+              >
+            </div>
             <span
               class="text-[10px] font-mono font-bold"
               :class="
-                getBatchCount(bNum - 1) >= 12 ? 'text-red-600 font-black' : ''
+                !isBatchEnabled(bNum - 1)
+                  ? 'text-gray-500'
+                  : getBatchCount(bNum - 1) >= 12
+                    ? 'text-red-600 font-black'
+                    : ''
               "
             >
               {{ getBatchCount(bNum - 1) }}/12
@@ -122,7 +159,29 @@
       </div>
 
       <div class="space-y-2">
-        <div class="flex items-center justify-between">
+        <div class="flex flex-wrap items-center justify-between gap-2">
+          <button
+            type="button"
+            @click="toggleActiveBatchEnabled"
+            class="font-black text-xs uppercase px-3 py-1.5 rounded-xl border-2 border-black flex items-center gap-1.5 cursor-pointer shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] active:translate-y-0.5 active:shadow-none transition-all"
+            :class="
+              isCurrentBatchEnabled
+                ? 'bg-green-400 text-black hover:bg-green-300'
+                : 'bg-red-500 text-white hover:bg-red-600'
+            "
+          >
+            <span>{{
+              isCurrentBatchEnabled
+                ? "✅ BATCH DIAKTIFKAN"
+                : "🚫 BATCH DINONAKTIFKAN"
+            }}</span>
+            <span class="text-[10px] opacity-90 font-bold"
+              >({{
+                isCurrentBatchEnabled ? "AKAN DIKIRIM" : "TIDAK DIKIRIM"
+              }})</span
+            >
+          </button>
+
           <button
             v-if="currentBatchString.length > 0"
             type="button"
@@ -140,6 +199,7 @@
           rows="3"
           :placeholder="`KETIK ATAU KLIK TOMBOL INSTRUKSI UNTUK BATCH ${activeBatchIndex + 1} (CONTOH: MAJU:10;KANAN:90;CAPIT;END)...`"
           class="w-full font-mono text-base md:text-lg font-black bg-white border-4 border-black p-4 rounded-2xl shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] focus:outline-none focus:bg-yellow-100 select-text"
+          :class="!isCurrentBatchEnabled ? 'bg-gray-100 opacity-70' : ''"
         ></textarea>
       </div>
 
@@ -187,11 +247,86 @@
         </div>
       </div>
     </div>
+    <teleport to="body">
+      <div
+        v-if="isImportModalOpen"
+        class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs select-none"
+        @click.self="closeImportModal"
+      >
+        <div
+          class="bg-yellow-50 border-4 border-black rounded-3xl p-6 md:p-8 max-w-xl w-full shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] space-y-5"
+        >
+          <div
+            class="flex items-center justify-between border-b-4 border-black pb-3 gap-3"
+          >
+            <div class="flex items-center gap-2">
+              <span class="text-2xl">📥</span>
+              <h2
+                class="text-2xl font-black uppercase tracking-tight text-black"
+              >
+                IMPOR INSTRUKSI (BATCH 1-10)
+              </h2>
+            </div>
+            <button
+              type="button"
+              @click="closeImportModal"
+              class="border-2 border-black font-black text-xl px-2.5 py-0.5 rounded-xl bg-red-500 text-white hover:bg-red-600 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] active:translate-y-0.5 active:shadow-none transition-all cursor-pointer shrink-0"
+            >
+              ✕
+            </button>
+          </div>
+
+          <div class="space-y-2">
+            <div class="flex items-center justify-between">
+              <button
+                type="button"
+                @click="pasteFromClipboard"
+                class="text-xs font-black uppercase bg-blue-600 hover:bg-blue-700 text-white border-2 border-black px-3 py-1 rounded-lg cursor-pointer shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] active:translate-y-0.5 active:shadow-none transition-all"
+              >
+                TEMPEL DARI CLIPBOARD
+              </button>
+            </div>
+
+            <textarea
+              v-model="importJsonText"
+              rows="6"
+              placeholder='Contoh: {"batches": ["MAJU:10;END", "FOLLOW_LINE:1,5,MAJU;END"]}'
+              class="w-full bg-white border-4 border-black rounded-xl p-3 font-mono text-sm font-bold focus:outline-none focus:bg-yellow-100 shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] select-text"
+            ></textarea>
+
+            <p
+              v-if="importErrorMessage"
+              class="text-xs font-black text-red-600 uppercase"
+            >
+              ⚠️ {{ importErrorMessage }}
+            </p>
+          </div>
+
+          <div class="flex items-center justify-end gap-3 pt-2">
+            <button
+              type="button"
+              @click="closeImportModal"
+              class="bg-slate-200 text-black font-black uppercase text-sm py-3 px-5 rounded-xl border-3 border-black shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] hover:bg-slate-300 active:translate-y-0.5 active:shadow-none transition-all cursor-pointer"
+            >
+              BATAL
+            </button>
+
+            <button
+              type="button"
+              @click="confirmImport"
+              class="bg-green-500 text-black font-black uppercase text-sm py-3 px-6 rounded-xl border-3 border-black shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] hover:bg-green-400 active:translate-y-0.5 active:shadow-none transition-all cursor-pointer flex items-center gap-2"
+            >
+              <span>KONFIRMASI IMPOR</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    </teleport>
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted, onUnmounted } from "vue";
+import { ref, computed, onMounted, onUnmounted } from "vue";
 import { RouterLink } from "vue-router";
 import InstructionButton from "@/components/InstructionButton.vue";
 import remoteDebugService from "@/services/remote-debug.service.js";
@@ -203,6 +338,7 @@ import {
 } from "@/data/instruction-aliases.js";
 
 const batchList = ref(Array(10).fill(""));
+const batchesEnabled = ref(Array(10).fill(true));
 const activeBatchIndex = ref(0);
 const currentBatchString = ref("");
 const instructionList = ref([]);
@@ -210,9 +346,16 @@ const isBleConnected = ref(false);
 const connectedDeviceName = ref("");
 const statusMessage = ref("");
 const lastSentCommand = ref("");
+const isImportModalOpen = ref(false);
+const importJsonText = ref("");
+const importErrorMessage = ref("");
 
 let unsubscribeState = null;
 let removeDisconnectListener = null;
+
+const isCurrentBatchEnabled = computed(() => {
+  return batchesEnabled.value[activeBatchIndex.value] !== false;
+});
 
 onMounted(() => {
   refreshState();
@@ -220,6 +363,7 @@ onMounted(() => {
 
   unsubscribeState = remoteDebugService.subscribe((state) => {
     batchList.value = state.batches || Array(10).fill("");
+    batchesEnabled.value = state.batchesEnabled || Array(10).fill(true);
     activeBatchIndex.value = state.activeBatchIndex || 0;
     currentBatchString.value = batchList.value[activeBatchIndex.value] || "";
     instructionList.value = state.instructions || [];
@@ -238,6 +382,7 @@ onUnmounted(() => {
 function refreshState() {
   const state = remoteDebugService.readState();
   batchList.value = state.batches || Array(10).fill("");
+  batchesEnabled.value = state.batchesEnabled || Array(10).fill(true);
   activeBatchIndex.value = state.activeBatchIndex || 0;
   currentBatchString.value = batchList.value[activeBatchIndex.value] || "";
   instructionList.value = state.instructions || [];
@@ -245,6 +390,14 @@ function refreshState() {
 
 function selectBatch(index) {
   remoteDebugService.setActiveBatchIndex(index);
+}
+
+function isBatchEnabled(index) {
+  return batchesEnabled.value[index] !== false;
+}
+
+function toggleActiveBatchEnabled() {
+  remoteDebugService.toggleBatchEnabled(activeBatchIndex.value);
 }
 
 function getBatchCount(index) {
@@ -262,6 +415,59 @@ function clearCurrentBatch() {
 
 function clearAllBatches() {
   remoteDebugService.clearAllBatches();
+}
+
+async function exportBatchesJson() {
+  try {
+    const jsonStr = remoteDebugService.exportToJson();
+    await navigator.clipboard.writeText(jsonStr);
+    statusMessage.value =
+      "Seluruh instruksi (Batch 1-10) berhasil disalin ke clipboard!";
+  } catch (err) {
+    statusMessage.value = `Gagal menyalin ke clipboard: ${err.message || err}`;
+  }
+}
+
+function openImportModal() {
+  importJsonText.value = "";
+  importErrorMessage.value = "";
+  isImportModalOpen.value = true;
+}
+
+function closeImportModal() {
+  isImportModalOpen.value = false;
+  importJsonText.value = "";
+  importErrorMessage.value = "";
+}
+
+async function pasteFromClipboard() {
+  try {
+    const text = await navigator.clipboard.readText();
+    if (text) {
+      importJsonText.value = text;
+      importErrorMessage.value = "";
+    }
+  } catch (err) {
+    importErrorMessage.value =
+      "Tidak dapat membaca clipboard otomatis. Silakan tempel manual.";
+  }
+}
+
+function confirmImport() {
+  if (!importJsonText.value.trim()) {
+    importErrorMessage.value =
+      "Silakan masukkan atau tempel JSON instruksi terlebih dahulu.";
+    return;
+  }
+  try {
+    remoteDebugService.importFromJson(importJsonText.value);
+    refreshState();
+    closeImportModal();
+    statusMessage.value =
+      "Berhasil mengimpor instruksi! Seluruh batch sebelumnya telah ditimpa.";
+  } catch (err) {
+    importErrorMessage.value = err.message || "Gagal mengimpor JSON.";
+  }
 }
 
 function onCurrentBatchInput(e) {
@@ -382,6 +588,9 @@ async function runProdMission() {
   const preparedBatches = [];
 
   for (let b = 0; b < 10; b++) {
+    if (!remoteDebugService.isBatchEnabled(b)) {
+      continue;
+    }
     const raw = String(allBatches[b] || "").trim();
     if (!raw) continue;
     const tokens = raw
@@ -409,7 +618,7 @@ async function runProdMission() {
 
   if (preparedBatches.length === 0) {
     statusMessage.value =
-      "Semua batch kosong! Silakan tambahkan instruksi terlebih dahulu.";
+      "Semua batch kosong atau dinonaktifkan! Silakan aktifkan dan tambahkan instruksi terlebih dahulu.";
     return;
   }
 
@@ -417,7 +626,10 @@ async function runProdMission() {
 
   try {
     statusMessage.value = "Mereset variabel batch di robot...";
-    const clearPromise = BleService.waitForAcknowledgment("[BATCHES_CLEARED]", 2000);
+    const clearPromise = BleService.waitForAcknowledgment(
+      "[BATCHES_CLEARED]",
+      2000,
+    );
     await sendRawBle("CLEAR");
     await clearPromise;
     await new Promise((r) => setTimeout(r, 60));
@@ -436,7 +648,9 @@ async function runProdMission() {
       await sendRawBle(pb.command);
       const ack = await ackPromise;
       if (!ack.success) {
-        throw new Error(`Robot tidak mengonfirmasi Batch ${pb.batchNum}: ${ack.reason || "Timeout"}`);
+        throw new Error(
+          `Robot tidak mengonfirmasi Batch ${pb.batchNum}: ${ack.reason || "Timeout"}`,
+        );
       }
       await new Promise((r) => setTimeout(r, 60));
     }
@@ -455,6 +669,7 @@ async function runProdMission() {
     const res = await resPromise;
 
     if (res.success) {
+      remoteDebugService.setActiveBatchIndex(0);
       statusMessage.value =
         "Seluruh instruksi misi berhasil diselesaikan oleh robot!";
     } else {

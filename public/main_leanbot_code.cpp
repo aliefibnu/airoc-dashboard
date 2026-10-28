@@ -37,6 +37,7 @@ struct Instruction {
   uint8_t opcode;
   int16_t p1;
   int16_t p2;
+  int8_t p3;
 };
 
 #define MAX_BATCHES 10
@@ -77,9 +78,9 @@ bool checkEmergency();
 void delayInterruptible(unsigned long ms);
 void moveMm(int mm, int dir, int speed);
 void rotateDeg(int deg, int dir, int speed);
-void pivotTurnDeg(int deg, int dir, int speed);
+void pivotTurnDeg(int deg, int turnDir, int moveDir, int speed);
 void moveToLine(int dir, int maxDistCm, int speed);
-void followLineUntilIntersection(int targetIntersections, int speed);
+void followLineUntilIntersection(int targetIntersections, int speed, int dir);
 void playBunyi(int count);
 void blinkLed(int count, int intervalMs);
 uint8_t parseColorIndex(const char* s);
@@ -157,12 +158,15 @@ void printOpcodeName(uint8_t op) {
 
 void printInstructionInfo(const Instruction& inst) {
   printOpcodeName(inst.opcode);
-  if (inst.p1 != 0 || inst.p2 != 0) {
+  if (inst.p1 != 0 || inst.p2 != 0 || inst.p3 != 0) {
     Serial.print(':');
     Serial.print(inst.p1);
-    if (inst.p2 != 0) {
+    if (inst.p2 != 0 || inst.p3 < 0) {
       Serial.print(',');
       Serial.print(inst.p2);
+      if (inst.p3 < 0) {
+        Serial.print(F(",MUNDUR"));
+      }
     }
   }
 }
@@ -437,18 +441,31 @@ void rotateDeg(int deg, int dir, int speed) {
   LbMotion.stopAndWait();
 }
 
-void pivotTurnDeg(int deg, int dir, int speed) {
+void pivotTurnDeg(int deg, int turnDir, int moveDir, int speed) {
   if (emergencyFlag || deg <= 0) return;
   int spd = speed > 0 ? toMotorSpeed(speed) : (currentSpeed > 0 ? currentSpeed : 1000);
-  if (dir > 0) {
-    LbMotion.runLR(+spd, 0);
+  int rotDir = 0;
+  if (turnDir > 0) {
+    if (moveDir >= 0) {
+      LbMotion.runLR(+spd, 0);
+      rotDir = +1;
+    } else {
+      LbMotion.runLR(-spd, 0);
+      rotDir = -1;
+    }
   } else {
-    LbMotion.runLR(0, +spd);
+    if (moveDir >= 0) {
+      LbMotion.runLR(0, +spd);
+      rotDir = -1;
+    } else {
+      LbMotion.runLR(0, -spd);
+      rotDir = +1;
+    }
   }
   int remaining = deg;
   while (remaining > 0 && !emergencyFlag) {
     int step = remaining > 10 ? 10 : remaining;
-    LbMotion.waitRotationDeg(dir * step);
+    LbMotion.waitRotationDeg(rotDir * step);
     remaining -= step;
     if (checkEmergency()) break;
   }
@@ -494,7 +511,7 @@ void moveToLine(int dir, int maxDistCm, int speed) {
   }
 }
 
-void followLineUntilIntersection(int targetIntersections, int speed) {
+void followLineUntilIntersection(int targetIntersections, int speed, int dir) {
   if (emergencyFlag) return;
   if (targetIntersections <= 0) {
     LbMotion.runLR(0, 0);
@@ -511,8 +528,13 @@ void followLineUntilIntersection(int targetIntersections, int speed) {
 
   int initLine = LbIRLine.read();
   if ((initLine == 0b1111) || ((initLine & 0b1001) == 0b1001)) {
-    LbMotion.runLR(spd, spd);
-    LbMotion.waitDistanceMm(25);
+    if (dir >= 0) {
+      LbMotion.runLR(+spd, +spd);
+      LbMotion.waitDistanceMm(+25);
+    } else {
+      LbMotion.runLR(-spd, -spd);
+      LbMotion.waitDistanceMm(-25);
+    }
   }
 
   while (!emergencyFlag) {
@@ -526,48 +548,92 @@ void followLineUntilIntersection(int targetIntersections, int speed) {
     if (isIntersection) {
       intersectionsCount++;
       if (intersectionsCount >= targetIntersections) break;
-      LbMotion.runLR(spd, spd);
-      LbMotion.waitDistanceMm(25);
+      if (dir >= 0) {
+        LbMotion.runLR(+spd, +spd);
+        LbMotion.waitDistanceMm(+25);
+      } else {
+        LbMotion.runLR(-spd, -spd);
+        LbMotion.waitDistanceMm(-25);
+      }
       continue;
     }
 
     if (lineValue != 0b0000) lastSeenLine = millis();
 
-    switch (lineValue) {
-      case 0b0100:
-      case 0b1110:
-        LbMotion.runLR(0, +spd);
-        break;
+    if (dir >= 0) {
+      switch (lineValue) {
+        case 0b0100:
+        case 0b1110:
+          LbMotion.runLR(0, +spd);
+          break;
 
-      case 0b1100:
-      case 0b1000:
-        LbMotion.runLR(-spd, +spd);
-        break;
+        case 0b1100:
+        case 0b1000:
+          LbMotion.runLR(-spd, +spd);
+          break;
 
-      case 0b0010:
-      case 0b0111:
-        LbMotion.runLR(+spd, 0);
-        break;
+        case 0b0010:
+        case 0b0111:
+          LbMotion.runLR(+spd, 0);
+          break;
 
-      case 0b0011:
-      case 0b0001:
-        LbMotion.runLR(+spd, -spd);
-        break;
+        case 0b0011:
+        case 0b0001:
+          LbMotion.runLR(+spd, -spd);
+          break;
 
-      case 0b0000:
-        if (millis() - lastSeenLine > 1500) {
-          LbMotion.runLR(0, 0);
-          LbMotion.stopAndWait();
-          LbRGB.fillColor(CRGB::Red);
-          LbRGB.show();
-          playBunyi(1);
-          return;
-        }
-        break;
+        case 0b0000:
+          if (millis() - lastSeenLine > 1500) {
+            LbMotion.runLR(0, 0);
+            LbMotion.stopAndWait();
+            LbRGB.fillColor(CRGB::Red);
+            LbRGB.show();
+            playBunyi(1);
+            return;
+          }
+          break;
 
-      default:
-        LbMotion.runLR(+spd, +spd);
-        break;
+        default:
+          LbMotion.runLR(+spd, +spd);
+          break;
+      }
+    } else {
+      switch (lineValue) {
+        case 0b0010:
+        case 0b0111:
+          LbMotion.runLR(0, -spd);
+          break;
+
+        case 0b0011:
+        case 0b0001:
+          LbMotion.runLR(+spd, -spd);
+          break;
+
+        case 0b0100:
+        case 0b1110:
+          LbMotion.runLR(-spd, 0);
+          break;
+
+        case 0b1100:
+        case 0b1000:
+          LbMotion.runLR(-spd, +spd);
+          break;
+
+        case 0b0000:
+          if (millis() - lastSeenLine > 1500) {
+            LbMotion.runLR(0, 0);
+            LbMotion.stopAndWait();
+            LbRGB.fillColor(CRGB::Red);
+            LbRGB.show();
+            playBunyi(1);
+            return;
+          }
+          break;
+
+        default:
+          LbMotion.runLR(-spd, -spd);
+          break;
+      }
     }
 
     delay(2);
@@ -667,6 +733,7 @@ bool parseInstruction(char* str, Instruction& inst) {
   inst.opcode = OP_NONE;
   inst.p1 = 0;
   inst.p2 = 0;
+  inst.p3 = 1;
 
   if (strcasecmp_P(cmd, PSTR("MAJU")) == 0) {
     inst.opcode = OP_MAJU;
@@ -678,10 +745,19 @@ bool parseInstruction(char* str, Instruction& inst) {
     inst.opcode = OP_KIRI;
   } else if (strcasecmp_P(cmd, PSTR("BELOK_KANAN")) == 0 || strcasecmp_P(cmd, PSTR("PIVOT_KANAN")) == 0) {
     inst.opcode = OP_BELOK_KANAN;
+    inst.p3 = 1;
+  } else if (strcasecmp_P(cmd, PSTR("BELOK_KANAN_MUNDUR")) == 0 || strcasecmp_P(cmd, PSTR("PIVOT_KANAN_MUNDUR")) == 0) {
+    inst.opcode = OP_BELOK_KANAN;
+    inst.p3 = -1;
   } else if (strcasecmp_P(cmd, PSTR("BELOK_KIRI")) == 0 || strcasecmp_P(cmd, PSTR("PIVOT_KIRI")) == 0) {
     inst.opcode = OP_BELOK_KIRI;
+    inst.p3 = 1;
+  } else if (strcasecmp_P(cmd, PSTR("BELOK_KIRI_MUNDUR")) == 0 || strcasecmp_P(cmd, PSTR("PIVOT_KIRI_MUNDUR")) == 0) {
+    inst.opcode = OP_BELOK_KIRI;
+    inst.p3 = -1;
   } else if (strcasecmp_P(cmd, PSTR("BELOK")) == 0) {
     inst.opcode = OP_BELOK_KANAN;
+    inst.p3 = 1;
   } else if (strcasecmp_P(cmd, PSTR("STOP")) == 0) {
     inst.opcode = OP_STOP;
   } else if (strcasecmp_P(cmd, PSTR("SPEED")) == 0) {
@@ -704,6 +780,10 @@ bool parseInstruction(char* str, Instruction& inst) {
     inst.opcode = OP_END;
   } else if (strcasecmp_P(cmd, PSTR("FOLLOW_LINE")) == 0) {
     inst.opcode = OP_FOLLOW_LINE;
+    inst.p3 = 1;
+  } else if (strcasecmp_P(cmd, PSTR("FOLLOW_LINE_MUNDUR")) == 0) {
+    inst.opcode = OP_FOLLOW_LINE;
+    inst.p3 = -1;
   } else if (strcasecmp_P(cmd, PSTR("MAJU_LINE")) == 0) {
     inst.opcode = OP_MAJU_LINE;
   } else if (strcasecmp_P(cmd, PSTR("MUNDUR_LINE")) == 0) {
@@ -732,21 +812,72 @@ bool parseInstruction(char* str, Instruction& inst) {
 
     if (inst.opcode == OP_LED_WARNA) {
       inst.p1 = parseColorIndex(params);
+    } else if (inst.opcode == OP_BELOK_KANAN || inst.opcode == OP_BELOK_KIRI) {
+      char* c1 = strchr(params, ',');
+      if (c1 != NULL) {
+        *c1 = '\0';
+        inst.p1 = atoi(params);
+        char* p2 = c1 + 1;
+        while (*p2 == ' ' || *p2 == '\t') p2++;
+        char* c2 = strchr(p2, ',');
+        if (c2 != NULL) {
+          *c2 = '\0';
+          inst.p2 = atoi(p2);
+          char* p3 = c2 + 1;
+          while (*p3 == ' ' || *p3 == '\t') p3++;
+          if (strcasecmp_P(p3, PSTR("MUNDUR")) == 0 || atoi(p3) == -1) {
+            inst.p3 = -1;
+          } else {
+            inst.p3 = 1;
+          }
+        } else {
+          if (strcasecmp_P(p2, PSTR("MUNDUR")) == 0 || atoi(p2) == -1) {
+            inst.p3 = -1;
+            inst.p2 = 0;
+          } else {
+            inst.p2 = atoi(p2);
+          }
+        }
+      } else {
+        inst.p1 = atoi(params);
+      }
     } else if (inst.opcode == OP_FOLLOW_LINE) {
-      char* comma = strchr(params, ',');
-      if (comma != NULL) {
-        *comma = '\0';
+      char* c1 = strchr(params, ',');
+      if (c1 != NULL) {
+        *c1 = '\0';
         char* p1Str = params;
-        char* p2Str = comma + 1;
-        while (*p2Str == ' ' || *p2Str == '\t') p2Str++;
+        while (*p1Str == ' ' || *p1Str == '\t') p1Str++;
         if (strcasecmp_P(p1Str, PSTR("OFF")) == 0 || strcmp_P(p1Str, PSTR("0")) == 0) inst.p1 = 0;
         else if (strcasecmp_P(p1Str, PSTR("ON")) == 0) inst.p1 = 9999;
         else inst.p1 = atoi(p1Str);
-        inst.p2 = atoi(p2Str);
+
+        char* p2 = c1 + 1;
+        while (*p2 == ' ' || *p2 == '\t') p2++;
+        char* c2 = strchr(p2, ',');
+        if (c2 != NULL) {
+          *c2 = '\0';
+          inst.p2 = atoi(p2);
+          char* p3 = c2 + 1;
+          while (*p3 == ' ' || *p3 == '\t') p3++;
+          if (strcasecmp_P(p3, PSTR("MUNDUR")) == 0 || atoi(p3) == -1) {
+            inst.p3 = -1;
+          } else {
+            inst.p3 = 1;
+          }
+        } else {
+          if (strcasecmp_P(p2, PSTR("MUNDUR")) == 0 || atoi(p2) == -1) {
+            inst.p3 = -1;
+            inst.p2 = 0;
+          } else {
+            inst.p2 = atoi(p2);
+          }
+        }
       } else {
-        if (strcasecmp_P(params, PSTR("OFF")) == 0 || strcmp_P(params, PSTR("0")) == 0) inst.p1 = 0;
-        else if (strcasecmp_P(params, PSTR("ON")) == 0) inst.p1 = 9999;
-        else inst.p1 = atoi(params);
+        char* p1Str = params;
+        while (*p1Str == ' ' || *p1Str == '\t') p1Str++;
+        if (strcasecmp_P(p1Str, PSTR("OFF")) == 0 || strcmp_P(p1Str, PSTR("0")) == 0) inst.p1 = 0;
+        else if (strcasecmp_P(p1Str, PSTR("ON")) == 0) inst.p1 = 9999;
+        else inst.p1 = atoi(p1Str);
       }
     } else {
       char* comma = strchr(params, ',');
@@ -787,11 +918,11 @@ void executeInstruction(const Instruction& inst) {
       break;
 
     case OP_BELOK_KANAN:
-      pivotTurnDeg(inst.p1, +1, inst.p2);
+      pivotTurnDeg(inst.p1, +1, inst.p3 < 0 ? -1 : +1, inst.p2);
       break;
 
     case OP_BELOK_KIRI:
-      pivotTurnDeg(inst.p1, -1, inst.p2);
+      pivotTurnDeg(inst.p1, -1, inst.p3 < 0 ? -1 : +1, inst.p2);
       break;
 
     case OP_STOP:
@@ -851,7 +982,7 @@ void executeInstruction(const Instruction& inst) {
 
     case OP_FOLLOW_LINE:
       if (inst.p1 > 0) {
-        followLineUntilIntersection(inst.p1, inst.p2);
+        followLineUntilIntersection(inst.p1, inst.p2, inst.p3 < 0 ? -1 : +1);
       } else {
         LbMotion.runLR(0, 0);
         LbMotion.stopAndWait();
@@ -894,7 +1025,7 @@ void executeAllBatches() {
   for (uint8_t b = 0; b < MAX_BATCHES; b++) {
     if (emergencyFlag || checkEmergency()) break;
     if (batchQueue[b].count == 0) {
-      break;
+      continue;
     }
 
     Serial.print(F("[START_BATCH] "));
@@ -928,8 +1059,12 @@ void executeAllBatches() {
     Serial.println(b + 1);
   }
 
+  clearAllBatches();
+  currentBatchIdx = 0;
+
   if (!emergencyFlag) {
     updateRobotState(STATE_READY);
+    Serial.println(F("[BATCHES_CLEARED]"));
     Serial.println(F("[MISSION_DONE]"));
   }
 }

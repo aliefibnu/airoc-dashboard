@@ -125,6 +125,11 @@ class RemoteDebugService {
             batches[i] = tokens.slice(i * 12, (i + 1) * 12).join(";");
           }
         }
+        let batchesEnabled = Array(10).fill(true);
+        if (Array.isArray(parsed.batchesEnabled) && parsed.batchesEnabled.length === 10) {
+          batchesEnabled = parsed.batchesEnabled.map((b) => b !== false);
+        }
+
         const activeBatchIndex =
           typeof parsed.activeBatchIndex === "number" &&
           parsed.activeBatchIndex >= 0 &&
@@ -137,6 +142,7 @@ class RemoteDebugService {
 
         return {
           batches,
+          batchesEnabled,
           activeBatchIndex,
           instructionString: currentString,
           instructions,
@@ -149,6 +155,7 @@ class RemoteDebugService {
     }
     return {
       batches: Array(10).fill(""),
+      batchesEnabled: Array(10).fill(true),
       activeBatchIndex: 0,
       instructionString: "",
       instructions: [],
@@ -163,6 +170,10 @@ class RemoteDebugService {
         Array.isArray(state.batches) && state.batches.length === 10
           ? state.batches
           : Array(10).fill("");
+      const batchesEnabled =
+        Array.isArray(state.batchesEnabled) && state.batchesEnabled.length === 10
+          ? state.batchesEnabled.map((b) => b !== false)
+          : Array(10).fill(true);
       const activeBatchIndex =
         typeof state.activeBatchIndex === "number" &&
         state.activeBatchIndex >= 0 &&
@@ -174,6 +185,7 @@ class RemoteDebugService {
 
       const normalizedState = {
         batches,
+        batchesEnabled,
         activeBatchIndex,
         instructionString: currentString,
         instructions,
@@ -241,6 +253,108 @@ class RemoteDebugService {
       batches: Array(10).fill(""),
       instructionString: "",
       instructions: [],
+    });
+  }
+
+  getBatchesEnabled() {
+    return [...this.readState().batchesEnabled];
+  }
+
+  isBatchEnabled(index) {
+    const safeIdx = Math.max(0, Math.min(9, Number(index) || 0));
+    return this.readState().batchesEnabled[safeIdx] !== false;
+  }
+
+  setBatchEnabled(index, enabled) {
+    const safeIdx = Math.max(0, Math.min(9, Number(index) || 0));
+    const currentState = this.readState();
+    const batchesEnabled = [...currentState.batchesEnabled];
+    batchesEnabled[safeIdx] = Boolean(enabled);
+    return this.saveState({
+      ...currentState,
+      batchesEnabled,
+    });
+  }
+
+  toggleBatchEnabled(index) {
+    const safeIdx = Math.max(0, Math.min(9, Number(index) || 0));
+    const current = this.isBatchEnabled(safeIdx);
+    return this.setBatchEnabled(safeIdx, !current);
+  }
+
+  exportToJson() {
+    const state = this.readState();
+    const payload = {
+      version: 1,
+      exportedAt: new Date().toISOString(),
+      batches: state.batches,
+      batchesEnabled: state.batchesEnabled,
+    };
+    return JSON.stringify(payload, null, 2);
+  }
+
+  importFromJson(jsonInput) {
+    let parsed = null;
+    if (typeof jsonInput === "string") {
+      try {
+        parsed = JSON.parse(jsonInput.trim());
+      } catch (err) {
+        throw new Error("Format JSON tidak valid! Pastikan sintaks JSON benar.");
+      }
+    } else if (typeof jsonInput === "object" && jsonInput !== null) {
+      parsed = jsonInput;
+    } else {
+      throw new Error("Data impor tidak valid!");
+    }
+
+    let newBatches = Array(10).fill("");
+    let newBatchesEnabled = Array(10).fill(true);
+
+    if (Array.isArray(parsed)) {
+      parsed.slice(0, 10).forEach((item, idx) => {
+        newBatches[idx] = String(item || "").trim();
+      });
+    } else if (Array.isArray(parsed.batches)) {
+      parsed.batches.slice(0, 10).forEach((item, idx) => {
+        newBatches[idx] = String(item || "").trim();
+      });
+      if (Array.isArray(parsed.batchesEnabled)) {
+        parsed.batchesEnabled.slice(0, 10).forEach((item, idx) => {
+          newBatchesEnabled[idx] = item !== false;
+        });
+      }
+    } else if (typeof parsed === "object") {
+      let foundAny = false;
+      for (let i = 0; i < 10; i++) {
+        const keyNum = String(i + 1);
+        const keyBatch = `batch${i + 1}`;
+        const keyB = `b${i + 1}`;
+        if (parsed[keyNum] !== undefined) {
+          newBatches[i] = String(parsed[keyNum] || "").trim();
+          foundAny = true;
+        } else if (parsed[keyBatch] !== undefined) {
+          newBatches[i] = String(parsed[keyBatch] || "").trim();
+          foundAny = true;
+        } else if (parsed[keyB] !== undefined) {
+          newBatches[i] = String(parsed[keyB] || "").trim();
+          foundAny = true;
+        }
+      }
+      if (!foundAny) {
+        throw new Error("Struktur JSON tidak dikenali! JSON harus memiliki format batch yang sesuai.");
+      }
+    }
+
+    this.clearAllBatches();
+    const currentState = this.readState();
+
+    return this.saveState({
+      ...currentState,
+      batches: newBatches,
+      batchesEnabled: newBatchesEnabled,
+      activeBatchIndex: 0,
+      instructionString: newBatches[0] || "",
+      instructions: this.parseInstructionString(newBatches[0] || ""),
     });
   }
 

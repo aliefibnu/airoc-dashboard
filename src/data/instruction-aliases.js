@@ -140,6 +140,16 @@ export const INSTRUCTION_ALIASES = [
         min: 1,
         max: 10,
       },
+      {
+        name: "mode",
+        label: "MODE ARAH (MAJU/MUNDUR)",
+        type: "select",
+        defaultValue: "MAJU",
+        options: [
+          { label: "⬆️ MAJU", value: "MAJU" },
+          { label: "⬇️ MUNDUR", value: "MUNDUR" },
+        ],
+      },
     ],
   },
   {
@@ -166,6 +176,16 @@ export const INSTRUCTION_ALIASES = [
         defaultValue: 5,
         min: 1,
         max: 10,
+      },
+      {
+        name: "mode",
+        label: "MODE ARAH (MAJU/MUNDUR)",
+        type: "select",
+        defaultValue: "MAJU",
+        options: [
+          { label: "⬆️ MAJU", value: "MAJU" },
+          { label: "⬇️ MUNDUR", value: "MUNDUR" },
+        ],
       },
     ],
   },
@@ -263,6 +283,16 @@ export const INSTRUCTION_ALIASES = [
         defaultValue: 5,
         min: 1,
         max: 10,
+      },
+      {
+        name: "mode",
+        label: "MODE ARAH (MAJU/MUNDUR)",
+        type: "select",
+        defaultValue: "MAJU",
+        options: [
+          { label: "⬆️ MAJU", value: "MAJU" },
+          { label: "⬇️ MUNDUR", value: "MUNDUR" },
+        ],
       },
     ],
   },
