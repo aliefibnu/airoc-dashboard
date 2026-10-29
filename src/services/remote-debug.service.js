@@ -218,6 +218,10 @@ class RemoteDebugService {
         if (Array.isArray(parsed.batchesEnabled) && parsed.batchesEnabled.length === 10) {
           batchesEnabled = parsed.batchesEnabled.map((b) => b !== false);
         }
+        let batchNames = Array(10).fill("");
+        if (Array.isArray(parsed.batchNames) && parsed.batchNames.length === 10) {
+          batchNames = parsed.batchNames.map((n) => String(n || ""));
+        }
 
         const activeBatchIndex =
           typeof parsed.activeBatchIndex === "number" &&
@@ -232,6 +236,7 @@ class RemoteDebugService {
         return {
           batches,
           batchesEnabled,
+          batchNames,
           activeBatchIndex,
           instructionString: currentString,
           instructions,
@@ -245,6 +250,7 @@ class RemoteDebugService {
     return {
       batches: Array(10).fill(""),
       batchesEnabled: Array(10).fill(true),
+      batchNames: Array(10).fill(""),
       activeBatchIndex: 0,
       instructionString: "",
       instructions: [],
@@ -263,6 +269,10 @@ class RemoteDebugService {
         Array.isArray(state.batchesEnabled) && state.batchesEnabled.length === 10
           ? state.batchesEnabled.map((b) => b !== false)
           : Array(10).fill(true);
+      const batchNames =
+        Array.isArray(state.batchNames) && state.batchNames.length === 10
+          ? state.batchNames.map((n) => String(n || ""))
+          : Array(10).fill("");
       const activeBatchIndex =
         typeof state.activeBatchIndex === "number" &&
         state.activeBatchIndex >= 0 &&
@@ -275,6 +285,7 @@ class RemoteDebugService {
       const normalizedState = {
         batches,
         batchesEnabled,
+        batchNames,
         activeBatchIndex,
         instructionString: currentString,
         instructions,
@@ -371,6 +382,26 @@ class RemoteDebugService {
     return this.setBatchEnabled(safeIdx, !current);
   }
 
+  getAllBatchNames() {
+    return [...this.readState().batchNames];
+  }
+
+  getBatchName(index) {
+    const safeIdx = Math.max(0, Math.min(9, Number(index) || 0));
+    return this.readState().batchNames[safeIdx] || "";
+  }
+
+  setBatchName(index, name) {
+    const safeIdx = Math.max(0, Math.min(9, Number(index) || 0));
+    const currentState = this.readState();
+    const batchNames = [...currentState.batchNames];
+    batchNames[safeIdx] = String(name || "").trim();
+    return this.saveState({
+      ...currentState,
+      batchNames,
+    });
+  }
+
   exportToJson() {
     const state = this.readState();
     const payload = {
@@ -378,6 +409,7 @@ class RemoteDebugService {
       exportedAt: new Date().toISOString(),
       batches: state.batches,
       batchesEnabled: state.batchesEnabled,
+      batchNames: state.batchNames,
     };
     return JSON.stringify(payload, null, 2);
   }
@@ -398,6 +430,7 @@ class RemoteDebugService {
 
     let newBatches = Array(10).fill("");
     let newBatchesEnabled = Array(10).fill(true);
+    let newBatchNames = Array(10).fill("");
 
     if (Array.isArray(parsed)) {
       parsed.slice(0, 10).forEach((item, idx) => {
@@ -410,6 +443,11 @@ class RemoteDebugService {
       if (Array.isArray(parsed.batchesEnabled)) {
         parsed.batchesEnabled.slice(0, 10).forEach((item, idx) => {
           newBatchesEnabled[idx] = item !== false;
+        });
+      }
+      if (Array.isArray(parsed.batchNames)) {
+        parsed.batchNames.slice(0, 10).forEach((item, idx) => {
+          newBatchNames[idx] = String(item || "").trim();
         });
       }
     } else if (typeof parsed === "object") {
@@ -429,6 +467,11 @@ class RemoteDebugService {
           foundAny = true;
         }
       }
+      if (Array.isArray(parsed.batchNames)) {
+        parsed.batchNames.slice(0, 10).forEach((item, idx) => {
+          newBatchNames[idx] = String(item || "").trim();
+        });
+      }
       if (!foundAny) {
         throw new Error("Struktur JSON tidak dikenali! JSON harus memiliki format batch yang sesuai.");
       }
@@ -441,6 +484,7 @@ class RemoteDebugService {
       ...currentState,
       batches: newBatches,
       batchesEnabled: newBatchesEnabled,
+      batchNames: newBatchNames,
       activeBatchIndex: 0,
       instructionString: newBatches[0] || "",
       instructions: this.parseInstructionString(newBatches[0] || ""),

@@ -127,6 +127,11 @@
                     ? 'bg-green-100 text-black border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:bg-green-200'
                     : 'bg-white text-gray-400 border-gray-400 hover:bg-gray-100 hover:text-black',
             ]"
+            :title="
+              getBatchName(bNum - 1)
+                ? `Batch ${bNum}: ${getBatchName(bNum - 1)}`
+                : `Batch ${bNum}`
+            "
           >
             <div class="flex items-center gap-1">
               <span
@@ -142,6 +147,12 @@
                 >✕</span
               >
             </div>
+            <span
+              v-if="getBatchName(bNum - 1)"
+              class="text-[8px] font-mono font-black max-w-full truncate px-1 rounded bg-black/10 text-black leading-tight"
+            >
+              {{ getBatchName(bNum - 1) }}
+            </span>
             <span
               class="text-[10px] font-mono font-bold"
               :class="
@@ -160,36 +171,63 @@
 
       <div class="space-y-2">
         <div class="flex flex-wrap items-center justify-between gap-2">
-          <button
-            type="button"
-            @click="toggleActiveBatchEnabled"
-            class="font-black text-xs uppercase px-3 py-1.5 rounded-xl border-2 border-black flex items-center gap-1.5 cursor-pointer shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] active:translate-y-0.5 active:shadow-none transition-all"
-            :class="
-              isCurrentBatchEnabled
-                ? 'bg-green-400 text-black hover:bg-green-300'
-                : 'bg-red-500 text-white hover:bg-red-600'
-            "
-          >
-            <span>{{
-              isCurrentBatchEnabled
-                ? "✅ BATCH DIAKTIFKAN"
-                : "🚫 BATCH DINONAKTIFKAN"
-            }}</span>
-            <span class="text-[10px] opacity-90 font-bold"
-              >({{
-                isCurrentBatchEnabled ? "AKAN DIKIRIM" : "TIDAK DIKIRIM"
-              }})</span
+          <div class="flex flex-wrap items-center gap-2">
+            <span
+              class="font-black text-xs uppercase px-2.5 py-1.5 rounded-xl border-2 border-black bg-yellow-400 text-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
             >
-          </button>
+              BATCH {{ activeBatchIndex + 1 }}
+            </span>
 
-          <button
-            v-if="currentBatchString.length > 0"
-            type="button"
-            @click="clearCurrentBatch"
-            class="text-xs font-black uppercase text-red-600 hover:text-red-700 cursor-pointer underline"
-          >
-            KOSONGKAN BATCH INI
-          </button>
+            <span
+              v-if="getBatchName(activeBatchIndex)"
+              class="font-black font-mono text-xs uppercase px-2.5 py-1.5 rounded-xl border-2 border-black bg-blue-100 text-blue-900 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
+            >
+              {{ getBatchName(activeBatchIndex) }}
+            </span>
+
+            <button
+              type="button"
+              @click="openRenameModal(activeBatchIndex)"
+              class="font-black text-xs uppercase bg-white hover:bg-yellow-200 text-black border-2 border-black px-2.5 py-1.5 rounded-xl cursor-pointer shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] active:translate-y-0.5 active:shadow-none transition-all flex items-center gap-1.5"
+              title="Ubah nama batch"
+            >
+              <span>✏️</span>
+              <span>RENAME</span>
+            </button>
+          </div>
+
+          <div class="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              @click="toggleActiveBatchEnabled"
+              class="font-black text-xs uppercase px-3 py-1.5 rounded-xl border-2 border-black flex items-center gap-1.5 cursor-pointer shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] active:translate-y-0.5 active:shadow-none transition-all"
+              :class="
+                isCurrentBatchEnabled
+                  ? 'bg-green-400 text-black hover:bg-green-300'
+                  : 'bg-red-500 text-white hover:bg-red-600'
+              "
+            >
+              <span>{{
+                isCurrentBatchEnabled
+                  ? "✅ BATCH DIAKTIFKAN"
+                  : "🚫 BATCH DINONAKTIFKAN"
+              }}</span>
+              <span class="text-[10px] opacity-90 font-bold"
+                >({{
+                  isCurrentBatchEnabled ? "AKAN DIKIRIM" : "TIDAK DIKIRIM"
+                }})</span
+              >
+            </button>
+
+            <button
+              v-if="currentBatchString.length > 0"
+              type="button"
+              @click="clearCurrentBatch"
+              class="text-xs font-black uppercase text-red-600 hover:text-red-700 cursor-pointer underline px-1"
+            >
+              KOSONGKAN
+            </button>
+          </div>
         </div>
 
         <textarea
@@ -197,7 +235,7 @@
           @input="onCurrentBatchInput"
           @change="onCurrentBatchInput"
           rows="3"
-          :placeholder="`KETIK ATAU KLIK TOMBOL INSTRUKSI UNTUK BATCH ${activeBatchIndex + 1} (CONTOH: MAJU:10;KANAN:90;CAPIT;END)...`"
+          :placeholder="`KETIK ATAU KLIK TOMBOL INSTRUKSI UNTUK ${activeBatchDisplayName} (CONTOH: MAJU:10;KANAN:90;CAPIT;END)...`"
           class="w-full font-mono text-base md:text-lg font-black bg-white border-4 border-black p-4 rounded-2xl shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] focus:outline-none focus:bg-yellow-100 select-text"
           :class="!isCurrentBatchEnabled ? 'bg-gray-100 opacity-70' : ''"
         ></textarea>
@@ -332,6 +370,14 @@
         </div>
       </div>
     </teleport>
+
+    <BatchRenameModal
+      :is-open="isRenameModalOpen"
+      :batch-index="renamingBatchIndex"
+      :initial-name="getBatchName(renamingBatchIndex)"
+      @close="isRenameModalOpen = false"
+      @save="onSaveBatchName"
+    />
   </div>
 </template>
 
@@ -339,6 +385,7 @@
 import { ref, computed, onMounted, onUnmounted } from "vue";
 import { RouterLink, useRouter } from "vue-router";
 import InstructionButton from "@/components/InstructionButton.vue";
+import BatchRenameModal from "@/components/BatchRenameModal.vue";
 import remoteDebugService from "@/services/remote-debug.service.js";
 import BleService from "@/services/ble.services.js";
 import instructionDefaultsService from "@/services/instruction-defaults.service.js";
@@ -349,6 +396,7 @@ import {
 
 const batchList = ref(Array(10).fill(""));
 const batchesEnabled = ref(Array(10).fill(true));
+const batchNames = ref(Array(10).fill(""));
 const activeBatchIndex = ref(0);
 const currentBatchString = ref("");
 const instructionList = ref([]);
@@ -359,6 +407,8 @@ const lastSentCommand = ref("");
 const isImportModalOpen = ref(false);
 const importJsonText = ref("");
 const importErrorMessage = ref("");
+const isRenameModalOpen = ref(false);
+const renamingBatchIndex = ref(0);
 
 const router = useRouter();
 
@@ -373,6 +423,13 @@ const isCurrentBatchEnabled = computed(() => {
   return batchesEnabled.value[activeBatchIndex.value] !== false;
 });
 
+const activeBatchDisplayName = computed(() => {
+  const name = getBatchName(activeBatchIndex.value);
+  return name
+    ? `BATCH ${activeBatchIndex.value + 1} (${name})`
+    : `BATCH ${activeBatchIndex.value + 1}`;
+});
+
 onMounted(() => {
   refreshState();
   checkBle();
@@ -380,6 +437,7 @@ onMounted(() => {
   unsubscribeState = remoteDebugService.subscribe((state) => {
     batchList.value = state.batches || Array(10).fill("");
     batchesEnabled.value = state.batchesEnabled || Array(10).fill(true);
+    batchNames.value = state.batchNames || Array(10).fill("");
     activeBatchIndex.value = state.activeBatchIndex || 0;
     currentBatchString.value = batchList.value[activeBatchIndex.value] || "";
     instructionList.value = state.instructions || [];
@@ -399,6 +457,7 @@ function refreshState() {
   const state = remoteDebugService.readState();
   batchList.value = state.batches || Array(10).fill("");
   batchesEnabled.value = state.batchesEnabled || Array(10).fill(true);
+  batchNames.value = state.batchNames || Array(10).fill("");
   activeBatchIndex.value = state.activeBatchIndex || 0;
   currentBatchString.value = batchList.value[activeBatchIndex.value] || "";
   instructionList.value = state.instructions || [];
@@ -410,6 +469,20 @@ function selectBatch(index) {
 
 function isBatchEnabled(index) {
   return batchesEnabled.value[index] !== false;
+}
+
+function getBatchName(index) {
+  return batchNames.value[index] || "";
+}
+
+function openRenameModal(index) {
+  renamingBatchIndex.value =
+    typeof index === "number" ? index : activeBatchIndex.value;
+  isRenameModalOpen.value = true;
+}
+
+function onSaveBatchName(newName) {
+  remoteDebugService.setBatchName(renamingBatchIndex.value, newName);
 }
 
 function toggleActiveBatchEnabled() {
@@ -626,7 +699,9 @@ async function runProdMission() {
         return;
       }
 
-      statusMessage.value = `Mengunggah Batch ${pb.batchNum} (${pb.count} instruksi) ke robot...`;
+      const bName = getBatchName(pb.batchIndex);
+      const bLabel = bName ? `Batch ${pb.batchNum} (${bName})` : `Batch ${pb.batchNum}`;
+      statusMessage.value = `Mengunggah ${bLabel} (${pb.count} instruksi) ke robot...`;
       const ackPromise = BleService.waitForAcknowledgment(
         `[BATCH_LOADED:${pb.batchNum}`,
         5000,

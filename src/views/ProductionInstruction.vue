@@ -122,34 +122,53 @@
         <div
           class="flex flex-wrap items-center justify-between gap-3 border-b-3 border-black pb-3 select-none"
         >
-          <div
-            class="flex items-center gap-3 cursor-pointer group"
-            @dblclick="openBatchInRemote(bNum - 1)"
-            title="Double click untuk buka batch ini di Remote Debugger"
-          >
-            <span
-              class="text-base md:text-lg font-black uppercase px-3 py-1 rounded-xl border-2 border-black group-hover:scale-105 transition-transform"
-              :class="
-                !isBatchEnabled(bNum - 1)
-                  ? 'bg-gray-400 text-white line-through'
-                  : 'bg-yellow-400 text-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] group-hover:bg-yellow-300'
-              "
+          <div class="flex flex-wrap items-center gap-2 md:gap-3">
+            <div
+              class="flex items-center gap-2 cursor-pointer group"
+              @dblclick="openBatchInRemote(bNum - 1)"
+              title="Double click untuk buka batch ini di Remote Debugger"
             >
-              BATCH {{ bNum }}
-            </span>
+              <span
+                class="text-base md:text-lg font-black uppercase px-3 py-1 rounded-xl border-2 border-black group-hover:scale-105 transition-transform"
+                :class="
+                  !isBatchEnabled(bNum - 1)
+                    ? 'bg-gray-400 text-white line-through'
+                    : 'bg-yellow-400 text-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] group-hover:bg-yellow-300'
+                "
+              >
+                BATCH {{ bNum }}
+              </span>
 
-            <span
-              class="text-xs font-mono font-black px-2.5 py-1 rounded-lg border-2 border-black bg-white group-hover:bg-yellow-100 transition-colors"
-              :class="
-                getBatchCount(bNum - 1) >= 12
-                  ? 'text-red-600'
-                  : getBatchCount(bNum - 1) > 0
-                    ? 'text-green-700'
-                    : 'text-gray-400'
-              "
+              <span
+                v-if="getBatchName(bNum - 1)"
+                class="text-sm md:text-base font-black font-mono uppercase px-3 py-1 rounded-xl border-2 border-black bg-blue-100 text-blue-900 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
+              >
+                {{ getBatchName(bNum - 1) }}
+              </span>
+
+              <span
+                class="text-xs font-mono font-black px-2.5 py-1 rounded-lg border-2 border-black bg-white group-hover:bg-yellow-100 transition-colors"
+                :class="
+                  getBatchCount(bNum - 1) >= 12
+                    ? 'text-red-600'
+                    : getBatchCount(bNum - 1) > 0
+                      ? 'text-green-700'
+                      : 'text-gray-400'
+                "
+              >
+                {{ getBatchCount(bNum - 1) }}/12 INSTRUKSI
+              </span>
+            </div>
+
+            <button
+              type="button"
+              @click.stop="openRenameModal(bNum - 1)"
+              class="text-xs font-black uppercase bg-white hover:bg-yellow-200 border-2 border-black px-2.5 py-1 rounded-lg cursor-pointer shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] active:translate-y-0.5 active:shadow-none transition-all flex items-center gap-1"
+              title="Ubah nama batch"
             >
-              {{ getBatchCount(bNum - 1) }}/12 INSTRUKSI
-            </span>
+              <span>✏️</span>
+              <span class="hidden sm:inline">RENAME</span>
+            </button>
           </div>
 
           <div class="flex items-center gap-3">
@@ -245,7 +264,7 @@
                   class="w-full bg-yellow-50 border-3 border-black rounded-xl p-2.5 text-sm font-black font-mono focus:outline-none focus:bg-white shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] cursor-pointer uppercase"
                 >
                   <option v-for="bNum in 10" :key="bNum" :value="bNum">
-                    BATCH {{ bNum }} ({{ getBatchCount(bNum - 1) }} CMD)
+                    BATCH {{ bNum }}{{ getBatchName(bNum - 1) ? ` - ${getBatchName(bNum - 1)}` : '' }} ({{ getBatchCount(bNum - 1) }} CMD)
                   </option>
                 </select>
               </div>
@@ -288,19 +307,28 @@
               {{
                 isExecuting
                   ? "SEDANG MENJALANKAN MISI..."
-                  : `START: BATCH ${selectedStartBatch} INST #${selectedStartInst}`
+                  : `START: BATCH ${selectedStartBatch}${getBatchName(selectedStartBatch - 1) ? ` (${getBatchName(selectedStartBatch - 1)})` : ''} INST #${selectedStartInst}`
               }}
             </span>
           </button>
         </div>
       </div>
     </div>
+
+    <BatchRenameModal
+      :is-open="isRenameModalOpen"
+      :batch-index="renamingBatchIndex"
+      :initial-name="getBatchName(renamingBatchIndex)"
+      @close="isRenameModalOpen = false"
+      @save="onSaveBatchName"
+    />
   </div>
 </template>
 
 <script setup>
 import { ref, computed, nextTick, onMounted, onUnmounted } from "vue";
 import { RouterLink, useRouter } from "vue-router";
+import BatchRenameModal from "@/components/BatchRenameModal.vue";
 import remoteDebugService from "@/services/remote-debug.service.js";
 import BleService from "@/services/ble.services.js";
 
@@ -309,6 +337,9 @@ const specificStartButtonRef = ref(null);
 
 const batchList = ref(Array(10).fill(""));
 const batchesEnabled = ref(Array(10).fill(true));
+const batchNames = ref(Array(10).fill(""));
+const isRenameModalOpen = ref(false);
+const renamingBatchIndex = ref(0);
 const isBleConnected = ref(false);
 const connectedDeviceName = ref("");
 const statusMessage = ref("");
@@ -339,6 +370,7 @@ onMounted(() => {
   unsubscribeState = remoteDebugService.subscribe((state) => {
     batchList.value = state.batches || Array(10).fill("");
     batchesEnabled.value = state.batchesEnabled || Array(10).fill(true);
+    batchNames.value = state.batchNames || Array(10).fill("");
   });
 
   removeDisconnectListener = BleService.onDisconnect(() => {
@@ -356,6 +388,7 @@ function refreshState() {
   const state = remoteDebugService.readState();
   batchList.value = state.batches || Array(10).fill("");
   batchesEnabled.value = state.batchesEnabled || Array(10).fill(true);
+  batchNames.value = state.batchNames || Array(10).fill("");
 }
 
 function checkBle() {
@@ -392,6 +425,19 @@ async function disconnectBle() {
 
 function isBatchEnabled(index) {
   return batchesEnabled.value[index] !== false;
+}
+
+function getBatchName(index) {
+  return batchNames.value[index] || "";
+}
+
+function openRenameModal(index) {
+  renamingBatchIndex.value = index;
+  isRenameModalOpen.value = true;
+}
+
+function onSaveBatchName(newName) {
+  remoteDebugService.setBatchName(renamingBatchIndex.value, newName);
 }
 
 function toggleBatch(index) {
@@ -494,7 +540,11 @@ async function executeMission(startBatchNum = 1, startInstNum = 1) {
         return;
       }
 
-      statusMessage.value = `Mengunggah Batch ${pb.batchNum} (${pb.count} instruksi) ke robot...`;
+      const bName = getBatchName(pb.batchIndex);
+      const bLabel = bName
+        ? `Batch ${pb.batchNum} (${bName})`
+        : `Batch ${pb.batchNum}`;
+      statusMessage.value = `Mengunggah ${bLabel} (${pb.count} instruksi) ke robot...`;
       const ackPromise = BleService.waitForAcknowledgment(
         `[BATCH_LOADED:${pb.batchNum}`,
         5000,
@@ -515,9 +565,14 @@ async function executeMission(startBatchNum = 1, startInstNum = 1) {
       return;
     }
 
+    const startBatchName = getBatchName(startBatchNum - 1);
+    const startBatchLabel = startBatchName
+      ? `Batch ${startBatchNum} (${startBatchName})`
+      : `Batch ${startBatchNum}`;
+
     const startInfo =
       startBatchNum > 1 || startInstNum > 1
-        ? `dari Batch ${startBatchNum} Instruksi #${startInstNum}`
+        ? `dari ${startBatchLabel} Instruksi #${startInstNum}`
         : "dari awal";
     statusMessage.value = `Semua batch berhasil diterima robot! Memulai eksekusi ${startInfo}... (Tekan SPACE untuk STOP)`;
     const resPromise = BleService.waitForBatchCompletion(300000);
