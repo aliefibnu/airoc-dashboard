@@ -366,6 +366,10 @@ async function handleTest() {
       await props.func(payload, { ...inputValues });
     }
     emit("test", payload, { ...inputValues });
+    if (targetAlias.value && targetAlias.value.toUpperCase() === "KALIBRASI") {
+      closeModal();
+      return;
+    }
     testFeedbackText.value = "TEST INSTRUCTION BERHASIL DIJALANKAN";
   } catch (err) {
     testFeedbackText.value = `TEST GAGAL: ${err.message || "ERROR"}`;

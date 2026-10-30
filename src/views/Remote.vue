@@ -419,6 +419,12 @@
       @close="isRenameModalOpen = false"
       @save="onSaveBatchName"
     />
+
+    <CalibrationResultModal
+      :is-open="isCalibrationModalOpen"
+      @close="isCalibrationModalOpen = false"
+      @confirm="handleCalibrationConfirm"
+    />
   </div>
 </template>
 
@@ -427,6 +433,7 @@ import { ref, computed, onMounted, onUnmounted } from "vue";
 import { RouterLink, useRouter } from "vue-router";
 import InstructionButton from "@/components/InstructionButton.vue";
 import BatchRenameModal from "@/components/BatchRenameModal.vue";
+import CalibrationResultModal from "@/components/CalibrationResultModal.vue";
 import remoteDebugService from "@/services/remote-debug.service.js";
 import BleService from "@/services/ble.services.js";
 import instructionDefaultsService from "@/services/instruction-defaults.service.js";
@@ -452,6 +459,7 @@ const importJsonText = ref("");
 const importErrorMessage = ref("");
 const isRenameModalOpen = ref(false);
 const renamingBatchIndex = ref(0);
+const isCalibrationModalOpen = ref(false);
 
 const router = useRouter();
 
@@ -550,6 +558,25 @@ function clearCurrentBatch() {
   remoteDebugService.clearBatch(activeBatchIndex.value);
 }
 
+function handleAppendInstruction(token) {
+  if (!isCurrentBatchEnabled.value) {
+    statusMessage.value = `Batch ${activeBatchIndex.value + 1} sedang dinonaktifkan!`;
+    return;
+  }
+  const current = currentBatchString.value.trim();
+  let nextVal = "";
+  if (current.length === 0) {
+    nextVal = `${token};`;
+  } else if (current.endsWith(";")) {
+    nextVal = `${current}${token};`;
+  } else {
+    nextVal = `${current};${token};`;
+  }
+  currentBatchString.value = nextVal;
+  remoteDebugService.setBatchInstructionString(activeBatchIndex.value, nextVal);
+  statusMessage.value = `Instruksi "${token}" berhasil ditambahkan ke Batch ${activeBatchIndex.value + 1}`;
+}
+
 function clearAllBatches() {
   remoteDebugService.clearAllBatches();
 }
@@ -608,7 +635,7 @@ function confirmImport() {
 }
 
 function onCurrentBatchInput(e) {
-  const val = e.target.value;
+  const val = e && e.target ? e.target.value : currentBatchString.value;
   remoteDebugService.setBatchInstructionString(activeBatchIndex.value, val);
 }
 
@@ -721,6 +748,15 @@ async function executeTestInstruction(name, payload) {
     cmd = resolveInstructionToken(name);
   }
   await sendRawBle(cmd);
+  if (name && name.toUpperCase() === "KALIBRASI") {
+    isCalibrationModalOpen.value = true;
+  }
+}
+
+function handleCalibrationConfirm(vals) {
+  isCalibrationModalOpen.value = false;
+  const token = `SET_THRESHOLD:${vals.join(",")}`;
+  handleAppendInstruction(token);
 }
 
 let abortBatchExecution = false;

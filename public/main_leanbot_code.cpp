@@ -24,6 +24,7 @@ enum Opcode : uint8_t {
   OP_MUNDUR_LINE,
   OP_STOP_LINE,
   OP_KALIBRASI,
+  OP_SET_THRESHOLD,
   OP_MISI_DONE
 };
 
@@ -38,7 +39,8 @@ struct Instruction {
   uint8_t opcode;
   int16_t p1;
   int16_t p2;
-  int8_t p3;
+  int16_t p3;
+  int16_t p4;
 };
 
 #define MAX_BATCHES 10
@@ -91,6 +93,27 @@ const char* getMissionKey(uint8_t idx);
 bool parseInstruction(char* str, Instruction& inst);
 void executeInstruction(const Instruction& inst);
 void executeAllBatches();
+void setLineThreshold(int16_t t0, int16_t t1, int16_t t2, int16_t t3);
+
+int16_t currentThresholds[4] = {302, 128, 94, 112};
+
+void setLineThreshold(int16_t t0, int16_t t1, int16_t t2, int16_t t3) {
+  currentThresholds[0] = t0;
+  currentThresholds[1] = t1;
+  currentThresholds[2] = t2;
+  currentThresholds[3] = t3;
+  LbIRLine.setThreshold(t0, t1, t2, t3);
+  Serial.print(F("[THRESHOLD_SET:"));
+  Serial.print(t0);
+  Serial.print(',');
+  Serial.print(t1);
+  Serial.print(',');
+  Serial.print(t2);
+  Serial.print(',');
+  Serial.print(t3);
+  Serial.println(']');
+  Leanbot.tone(2000, 80);
+}
 
 int freeRam() {
   extern int __heap_start, *__brkval;
@@ -155,12 +178,24 @@ void printOpcodeName(uint8_t op) {
     case OP_MUNDUR_LINE: Serial.print(F("MUNDUR_LINE")); break;
     case OP_STOP_LINE: Serial.print(F("STOP_LINE")); break;
     case OP_KALIBRASI: Serial.print(F("KALIBRASI")); break;
+    case OP_SET_THRESHOLD: Serial.print(F("SET_THRESHOLD")); break;
     case OP_MISI_DONE: Serial.print(F("MISI_DONE")); break;
     default: Serial.print(op); break;
   }
 }
 
 void printInstructionInfo(const Instruction& inst) {
+  if (inst.opcode == OP_SET_THRESHOLD) {
+    Serial.print(F("SET_THRESHOLD:"));
+    Serial.print(inst.p1);
+    Serial.print(',');
+    Serial.print(inst.p2);
+    Serial.print(',');
+    Serial.print(inst.p3);
+    Serial.print(',');
+    Serial.print(inst.p4);
+    return;
+  }
   if (inst.opcode == OP_MISI_DONE) {
     Serial.print(F("MISI_DONE:"));
     Serial.print(getMissionKey(inst.p1));
@@ -225,7 +260,7 @@ bool enqueueBatchToken(uint8_t bIdx) {
 
 void setup() {
   Leanbot.begin();
-  LbIRLine.doManualCalibration(TB1A);
+  setLineThreshold(currentThresholds[0], currentThresholds[1], currentThresholds[2], currentThresholds[3]);
   delay(200);
   LbRGB.fillColor(CRGB::Black);
   LbRGB.show();
@@ -325,6 +360,35 @@ void loop() {
         prefixBuf[0] = '\0';
         executeAllBatches();
         return;
+      }
+
+      if (strstr_P(prefixBuf, PSTR("KALIBRASI")) != NULL || strstr_P(prefixBuf, PSTR("CALIBRATE")) != NULL) {
+        prefixLen = 0;
+        prefixBuf[0] = '\0';
+        Instruction calInst;
+        calInst.opcode = OP_KALIBRASI;
+        calInst.p1 = 0;
+        calInst.p2 = 0;
+        calInst.p3 = 0;
+        calInst.p4 = 0;
+        executeInstruction(calInst);
+        return;
+      }
+
+      char* threshPtr = strstr_P(prefixBuf, PSTR("SET_THRESHOLD:"));
+      if (threshPtr == NULL) threshPtr = strstr_P(prefixBuf, PSTR("THRESHOLD:"));
+      if (threshPtr == NULL) threshPtr = strstr_P(prefixBuf, PSTR("SET_TREESHOLD:"));
+      if (threshPtr != NULL) {
+        char* semicolon = strchr(threshPtr, ';');
+        if (semicolon != NULL || c == '\n' || c == '\r') {
+          if (semicolon != NULL) *semicolon = '\0';
+          Instruction thInst;
+          parseInstruction(threshPtr, thInst);
+          executeInstruction(thInst);
+          prefixLen = 0;
+          prefixBuf[0] = '\0';
+          return;
+        }
       }
 
       char* batchPtr = strstr_P(prefixBuf, PSTR("BATCH:"));
@@ -832,6 +896,8 @@ bool parseInstruction(char* str, Instruction& inst) {
     inst.opcode = OP_STOP_LINE;
   } else if (strcasecmp_P(cmd, PSTR("KALIBRASI")) == 0 || strcasecmp_P(cmd, PSTR("CALIBRATE")) == 0) {
     inst.opcode = OP_KALIBRASI;
+  } else if (strcasecmp_P(cmd, PSTR("SET_THRESHOLD")) == 0 || strcasecmp_P(cmd, PSTR("SET_TREESHOLD")) == 0 || strcasecmp_P(cmd, PSTR("THRESHOLD")) == 0) {
+    inst.opcode = OP_SET_THRESHOLD;
   } else if (strcasecmp_P(cmd, PSTR("MISI_DONE")) == 0 || strcasecmp_P(cmd, PSTR("TANDAI_DONE")) == 0 || strcasecmp_P(cmd, PSTR("TANDAI_MISI_DONE")) == 0) {
     inst.opcode = OP_MISI_DONE;
     inst.p1 = 1;
@@ -854,7 +920,43 @@ bool parseInstruction(char* str, Instruction& inst) {
       while (*params == ' ' || *params == '\t') params++;
     }
 
-    if (inst.opcode == OP_MISI_DONE) {
+    if (inst.opcode == OP_SET_THRESHOLD) {
+      char* c1 = strchr(params, ',');
+      if (c1 != NULL) {
+        *c1 = '\0';
+        inst.p1 = atoi(params);
+        char* p2 = c1 + 1;
+        while (*p2 == ' ' || *p2 == '\t') p2++;
+        char* c2 = strchr(p2, ',');
+        if (c2 != NULL) {
+          *c2 = '\0';
+          inst.p2 = atoi(p2);
+          char* p3 = c2 + 1;
+          while (*p3 == ' ' || *p3 == '\t') p3++;
+          char* c3 = strchr(p3, ',');
+          if (c3 != NULL) {
+            *c3 = '\0';
+            inst.p3 = atoi(p3);
+            char* p4 = c3 + 1;
+            while (*p4 == ' ' || *p4 == '\t') p4++;
+            inst.p4 = atoi(p4);
+          } else {
+            inst.p3 = atoi(p2);
+            inst.p4 = inst.p3;
+          }
+        } else {
+          inst.p2 = atoi(p2);
+          inst.p3 = inst.p2;
+          inst.p4 = inst.p2;
+        }
+      } else {
+        int16_t val = atoi(params);
+        inst.p1 = val;
+        inst.p2 = val;
+        inst.p3 = val;
+        inst.p4 = val;
+      }
+    } else if (inst.opcode == OP_MISI_DONE) {
       char* comma = strchr(params, ',');
       if (comma != NULL) {
         *comma = '\0';
@@ -1066,6 +1168,7 @@ void executeInstruction(const Instruction& inst) {
     case OP_KALIBRASI:
       LbMotion.runLR(0, 0);
       LbMotion.stopAndWait();
+      Serial.println(F("[CALIBRATION_START]"));
       LbIRLine.doManualCalibration(TB1A);
       while (LbTouch.read(TB1A));
       delay(200);
@@ -1073,6 +1176,11 @@ void executeInstruction(const Instruction& inst) {
       LbRGB.fillColor(CRGB::Black);
       LbRGB.show();
       playBunyi(2);
+      Serial.println(F("[CALIBRATION_DONE]"));
+      break;
+
+    case OP_SET_THRESHOLD:
+      setLineThreshold(inst.p1, inst.p2, inst.p3, inst.p4);
       break;
 
     case OP_MISI_DONE:

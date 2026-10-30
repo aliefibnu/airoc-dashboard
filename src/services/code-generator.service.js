@@ -1,5 +1,6 @@
 import remoteDebugService from "@/services/remote-debug.service.js";
 import instructionDefaultsService from "@/services/instruction-defaults.service.js";
+import lineSensorService from "@/services/line-sensor.service.js";
 
 class CodeGeneratorService {
   escapeCppString(str) {
@@ -38,6 +39,10 @@ class CodeGeneratorService {
     const batches = Array.isArray(options.batches) ? options.batches : state.batches;
     const batchesEnabled = Array.isArray(options.batchesEnabled) ? options.batchesEnabled : state.batchesEnabled;
     const defaultSpeed = options.defaultSpeed || this.getDefaultSpeedFromSettings();
+    const threshold = Array.isArray(options.threshold) && options.threshold.length === 4
+      ? options.threshold
+      : lineSensorService.getThreshold();
+    const thresholdStr = threshold.join(", ");
 
     const batchDeclarations = [];
     for (let i = 0; i < 10; i++) {
@@ -79,6 +84,7 @@ enum Opcode : uint8_t {
   OP_MUNDUR_LINE,
   OP_STOP_LINE,
   OP_KALIBRASI,
+  OP_SET_THRESHOLD,
   OP_MISI_DONE
 };
 
@@ -93,7 +99,8 @@ struct Instruction {
   uint8_t opcode;
   int16_t p1;
   int16_t p2;
-  int8_t p3;
+  int16_t p3;
+  int16_t p4;
 };
 
 #define MAX_BATCHES 10
@@ -204,12 +211,24 @@ void printOpcodeName(uint8_t op) {
     case OP_MUNDUR_LINE: Serial.print(F("MUNDUR_LINE")); break;
     case OP_STOP_LINE: Serial.print(F("STOP_LINE")); break;
     case OP_KALIBRASI: Serial.print(F("KALIBRASI")); break;
+    case OP_SET_THRESHOLD: Serial.print(F("SET_THRESHOLD")); break;
     case OP_MISI_DONE: Serial.print(F("MISI_DONE")); break;
     default: Serial.print(op); break;
   }
 }
 
 void printInstructionInfo(const Instruction& inst) {
+  if (inst.opcode == OP_SET_THRESHOLD) {
+    Serial.print(F("SET_THRESHOLD:"));
+    Serial.print(inst.p1);
+    Serial.print(',');
+    Serial.print(inst.p2);
+    Serial.print(',');
+    Serial.print(inst.p3);
+    Serial.print(',');
+    Serial.print(inst.p4);
+    return;
+  }
   if (inst.opcode == OP_MISI_DONE) {
     Serial.print(F("MISI_DONE:"));
     Serial.print(getMissionKey(inst.p1));
@@ -651,6 +670,8 @@ bool parseInstruction(char* str, Instruction& inst) {
     inst.opcode = OP_STOP_LINE;
   } else if (strcasecmp_P(cmd, PSTR("KALIBRASI")) == 0 || strcasecmp_P(cmd, PSTR("CALIBRATE")) == 0) {
     inst.opcode = OP_KALIBRASI;
+  } else if (strcasecmp_P(cmd, PSTR("SET_THRESHOLD")) == 0 || strcasecmp_P(cmd, PSTR("SET_TREESHOLD")) == 0 || strcasecmp_P(cmd, PSTR("THRESHOLD")) == 0) {
+    inst.opcode = OP_SET_THRESHOLD;
   } else if (strcasecmp_P(cmd, PSTR("MISI_DONE")) == 0 || strcasecmp_P(cmd, PSTR("TANDAI_DONE")) == 0 || strcasecmp_P(cmd, PSTR("TANDAI_MISI_DONE")) == 0) {
     inst.opcode = OP_MISI_DONE;
     inst.p1 = 1;
@@ -670,6 +691,45 @@ bool parseInstruction(char* str, Instruction& inst) {
         params += 4;
         if (*params == ',') params++;
       }
+    }
+
+    if (inst.opcode == OP_SET_THRESHOLD) {
+      char* c1 = strchr(params, ',');
+      if (c1 != NULL) {
+        *c1 = '\\0';
+        inst.p1 = atoi(params);
+        char* p2 = c1 + 1;
+        while (*p2 == ' ' || *p2 == '\\t') p2++;
+        char* c2 = strchr(p2, ',');
+        if (c2 != NULL) {
+          *c2 = '\\0';
+          inst.p2 = atoi(p2);
+          char* p3 = c2 + 1;
+          while (*p3 == ' ' || *p3 == '\\t') p3++;
+          char* c3 = strchr(p3, ',');
+          if (c3 != NULL) {
+            *c3 = '\\0';
+            inst.p3 = atoi(p3);
+            char* p4 = c3 + 1;
+            while (*p4 == ' ' || *p4 == '\\t') p4++;
+            inst.p4 = atoi(p4);
+          } else {
+            inst.p3 = atoi(p2);
+            inst.p4 = inst.p3;
+          }
+        } else {
+          inst.p2 = atoi(p2);
+          inst.p3 = inst.p2;
+          inst.p4 = inst.p2;
+        }
+      } else {
+        int16_t val = atoi(params);
+        inst.p1 = val;
+        inst.p2 = val;
+        inst.p3 = val;
+        inst.p4 = val;
+      }
+      return true;
     }
 
     if (inst.opcode == OP_LED_WARNA) {
@@ -853,6 +913,19 @@ void executeInstruction(const Instruction& inst) {
       playBunyi(2);
       break;
 
+    case OP_SET_THRESHOLD:
+      LbIRLine.setThreshold(inst.p1, inst.p2, inst.p3, inst.p4);
+      Serial.print(F("[THRESHOLD_SET:"));
+      Serial.print(inst.p1);
+      Serial.print(',');
+      Serial.print(inst.p2);
+      Serial.print(',');
+      Serial.print(inst.p3);
+      Serial.print(',');
+      Serial.print(inst.p4);
+      Serial.println(']');
+      break;
+
     case OP_MISI_DONE:
       Serial.print(F("IOT : {\\"key\\":\\""));
       Serial.print(getMissionKey(inst.p1));
@@ -915,7 +988,7 @@ void executeAllBatches() {
 
 void setup() {
   Leanbot.begin();
-  LbIRLine.doManualCalibration(TB1A);
+  LbIRLine.setThreshold(${thresholdStr});
   delay(200);
   LbRGB.fillColor(CRGB::Black);
   LbRGB.show();

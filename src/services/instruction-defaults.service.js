@@ -15,6 +15,7 @@ const CRUCIAL_DEFAULT_KEYS = {
   MUNDUR_LINE: ["max_cm"],
   TUNGGU: ["ms"],
   BUNYI: ["jumlah"],
+  SET_THRESHOLD: ["t0", "t1", "t2", "t3"],
   MISI_DONE: ["misi", "status"],
 };
 
