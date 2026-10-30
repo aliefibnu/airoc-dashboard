@@ -27,22 +27,22 @@
           <h3>
             {{
               isBleConnected
-                ? connectedDeviceName
-                  ? `${connectedDeviceName}`
-                  : "BLE CONNECTED"
+                ? connectedDevicesList.length === 2
+                  ? `2 ROBOT: ${connectedDevicesList.map((d) => d.name).join(' & ')}`
+                  : `1 ROBOT: ${connectedDeviceName || 'BLE CONNECTED'}`
                 : "BLE DISCONNECTED"
             }}
           </h3>
         </div>
 
         <button
-          v-if="!isBleConnected"
+          v-if="connectedDevicesList.length < 2"
           type="button"
           @click="connectBle"
           class="bg-blue-600 text-white font-black text-sm md:text-base py-3 px-5 rounded-2xl border-4 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:bg-blue-700 active:translate-y-1 active:shadow-none transition-all cursor-pointer flex items-center gap-2"
         >
           <span>📡</span>
-          <span>HUBUNGKAN BLE</span>
+          <span>{{ connectedDevicesList.length === 1 ? '+ ROBOT 2' : 'HUBUNGKAN BLE' }}</span>
         </button>
 
         <button
@@ -348,9 +348,9 @@ import iotService from "@/services/iot.service.js";
 import { MISSION_LIST } from "@/data/missions.js";
 
 const pins = ref([]);
-const logs = ref([]);
 const isBleConnected = ref(false);
 const connectedDeviceName = ref("");
+const connectedDevicesList = ref([]);
 const statusMessage = ref("");
 
 const isModalOpen = ref(false);
@@ -364,23 +364,22 @@ const formSelectedPreset = ref("neutral_ungu");
 const formDone = ref(false);
 const formEnabled = ref(true);
 
-const simKey = ref("neutral_ungu");
-const simDone = ref(true);
-
 let unsubscribeIot = null;
 let removeDisconnectListener = null;
+let removeConnectListener = null;
 
 onMounted(() => {
   checkBle();
   pins.value = iotService.getPins();
-  logs.value = iotService.getLogs();
 
   unsubscribeIot = iotService.subscribe((state) => {
     pins.value = state.pins || [];
-    logs.value = state.logs || [];
   });
 
   removeDisconnectListener = BleService.onDisconnect(() => {
+    checkBle();
+  });
+  removeConnectListener = BleService.onConnect(() => {
     checkBle();
   });
 });
@@ -388,21 +387,27 @@ onMounted(() => {
 onUnmounted(() => {
   if (unsubscribeIot) unsubscribeIot();
   if (removeDisconnectListener) removeDisconnectListener();
+  if (removeConnectListener) removeConnectListener();
 });
 
 function checkBle() {
   isBleConnected.value = BleService.isConnected();
+  connectedDevicesList.value = BleService.getConnectedDevices();
   const info = BleService.getConnectedDeviceInfo();
   connectedDeviceName.value = info ? info.name : "";
 }
 
 async function connectBle() {
+  if (connectedDevicesList.value.length >= 2) {
+    statusMessage.value = "Maksimal 2 Leanbot sudah terhubung!";
+    return;
+  }
   try {
     statusMessage.value = "Membuka pencarian Bluetooth...";
-    await BleService.startScanning();
-    const peripherals = BleService.discoveredPeripherals;
-    if (peripherals && peripherals.size > 0) {
-      const firstId = Array.from(peripherals.keys())[0];
+    const peripherals = await BleService.startScanning();
+    const firstId = peripherals.keys().next().value;
+    if (firstId) {
+      statusMessage.value = "Menghubungkan ke robot...";
       await BleService.connectDevice(firstId);
       checkBle();
       statusMessage.value = `Berhasil terhubung ke ${connectedDeviceName.value}`;
@@ -414,9 +419,9 @@ async function connectBle() {
 
 async function disconnectBle() {
   try {
-    await BleService.disconnectDevice();
+    await BleService.disconnectAll();
     checkBle();
-    statusMessage.value = "Koneksi BLE diputuskan.";
+    statusMessage.value = "Semua koneksi BLE diputuskan.";
   } catch (err) {
     statusMessage.value = `Gagal memutuskan: ${err.message || err}`;
   }
@@ -520,31 +525,6 @@ function resetPins() {
   if (confirm("Reset semua virtual pin kembali ke 0 pin (default)?")) {
     iotService.clearPins();
     statusMessage.value = "Semua virtual pin direset ke 0 pin.";
-  }
-}
-
-function clearLogs() {
-  iotService.clearLogs();
-  statusMessage.value = "Log pesan IOT dibersihkan.";
-}
-
-function triggerSimulation() {
-  const raw = iotService.simulateMessage(simKey.value, simDone.value);
-  statusMessage.value = `Simulasi terkirim: ${raw}`;
-}
-
-async function sendBleInstruction() {
-  if (!BleService.isConnected()) {
-    statusMessage.value = "Robot BLE belum terhubung!";
-    return;
-  }
-  const cmd = `MISI_DONE:${simKey.value},${simDone.value ? 1 : 0}`;
-  try {
-    statusMessage.value = `Mengirim perintah ${cmd} ke robot...`;
-    await BleService.sendCommand(cmd);
-    statusMessage.value = `Perintah ${cmd} berhasil dikirim ke robot! Menunggu robot membalas...`;
-  } catch (err) {
-    statusMessage.value = `Gagal mengirim ke robot: ${err.message || err}`;
   }
 }
 

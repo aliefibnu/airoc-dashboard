@@ -3,7 +3,7 @@
     type="button"
     :disabled="disabled"
     @click="openModal"
-    class="font-black uppercase text-xl py-4 px-6 rounded-2xl border-4 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] active:translate-y-1 active:shadow-none transition-all cursor-pointer disabled:bg-gray-400 disabled:shadow-none disabled:cursor-not-allowed select-none"
+    class="font-black uppercase text-xl py-4 px-6 rounded-2xl border-4 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] active:translate-y-1 active:shadow-none transition-all cursor-pointer disabled:bg-gray-300 disabled:text-gray-500 disabled:border-gray-400 disabled:shadow-none disabled:cursor-not-allowed disabled:opacity-60 select-none"
     :class="buttonColorClass"
   >
     <slot>
@@ -322,6 +322,7 @@ function initInputValues() {
 }
 
 function openModal() {
+  if (props.disabled) return;
   initInputValues();
   testExecuted.value = false;
   isOpen.value = true;
@@ -408,6 +409,9 @@ async function handleConfirm() {
 }
 
 const buttonColorClass = computed(() => {
+  if (props.disabled) {
+    return "bg-gray-300 text-gray-500 border-gray-400 shadow-none cursor-not-allowed opacity-60";
+  }
   const colorName = props.color || instructionDef.value?.color || "neutral";
   switch (colorName.toLowerCase()) {
     case "green":

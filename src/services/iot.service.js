@@ -254,7 +254,7 @@ class IotService {
     return null;
   }
 
-  _onBleData(chunk) {
+  _onBleData(chunk, device = null) {
     if (typeof chunk !== "string") return;
     this.rxBuffer += chunk;
 
@@ -263,7 +263,7 @@ class IotService {
       const line = this.rxBuffer.substring(0, nlIndex).trim();
       this.rxBuffer = this.rxBuffer.substring(nlIndex + 1);
       if (line.length > 0) {
-        this.processIncomingMessage(line);
+        this.processIncomingMessage(line, device);
       }
     }
 
@@ -272,7 +272,7 @@ class IotService {
     }
   }
 
-  processIncomingMessage(rawLine) {
+  processIncomingMessage(rawLine, device = null) {
     if (!rawLine || typeof rawLine !== "string") return;
     const trimmed = rawLine.trim();
 
@@ -288,6 +288,7 @@ class IotService {
       parsed: parsed || null,
       matchedPins: [],
       success: !!parsed,
+      deviceName: device ? (device.name || "LEANBOT") : null,
     };
 
     if (parsed && parsed.key) {

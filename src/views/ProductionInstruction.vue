@@ -27,22 +27,38 @@
           <h3>
             {{
               isBleConnected
-                ? connectedDeviceName
-                  ? `${connectedDeviceName}`
-                  : "BLE CONNECTED"
+                ? connectedDevicesList.length === 2
+                  ? `2 ROBOT: ${connectedDevicesList.map((d) => d.name).join(' & ')}`
+                  : `1 ROBOT: ${connectedDeviceName || 'BLE CONNECTED'}`
                 : "BLE DISCONNECTED"
             }}
           </h3>
         </div>
 
+        <select
+          v-if="connectedDevicesList.length > 1"
+          v-model="activeBleTarget"
+          @change="onBleTargetChange"
+          class="bg-white border-3 border-black rounded-2xl px-3 py-3 text-xs md:text-sm font-black uppercase font-mono shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] cursor-pointer"
+        >
+          <option value="all">📢 SEMUA ROBOT (BROADCAST)</option>
+          <option
+            v-for="(dev, idx) in connectedDevicesList"
+            :key="dev.id"
+            :value="dev.id"
+          >
+            🤖 R{{ idx + 1 }}: {{ dev.name }}
+          </option>
+        </select>
+
         <button
-          v-if="!isBleConnected"
+          v-if="connectedDevicesList.length < 2"
           type="button"
           @click="connectBle"
           class="bg-blue-600 text-white font-black text-sm md:text-base py-3 px-5 rounded-2xl border-4 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:bg-blue-700 active:translate-y-1 active:shadow-none transition-all cursor-pointer flex items-center gap-2"
         >
           <span>📡</span>
-          <span>HUBUNGKAN BLE</span>
+          <span>{{ connectedDevicesList.length === 1 ? '+ ROBOT 2' : 'HUBUNGKAN BLE' }}</span>
         </button>
 
         <button
@@ -342,6 +358,8 @@ const isRenameModalOpen = ref(false);
 const renamingBatchIndex = ref(0);
 const isBleConnected = ref(false);
 const connectedDeviceName = ref("");
+const connectedDevicesList = ref([]);
+const activeBleTarget = ref("all");
 const statusMessage = ref("");
 const isExecuting = ref(false);
 
@@ -350,6 +368,7 @@ const selectedStartInst = ref(1);
 
 let unsubscribeState = null;
 let removeDisconnectListener = null;
+let removeConnectListener = null;
 let abortExecution = false;
 
 function handleKeyDown(event) {
@@ -376,12 +395,16 @@ onMounted(() => {
   removeDisconnectListener = BleService.onDisconnect(() => {
     checkBle();
   });
+  removeConnectListener = BleService.onConnect(() => {
+    checkBle();
+  });
 });
 
 onUnmounted(() => {
   window.removeEventListener("keydown", handleKeyDown);
   if (unsubscribeState) unsubscribeState();
   if (removeDisconnectListener) removeDisconnectListener();
+  if (removeConnectListener) removeConnectListener();
 });
 
 function refreshState() {
@@ -393,11 +416,21 @@ function refreshState() {
 
 function checkBle() {
   isBleConnected.value = BleService.isConnected();
+  connectedDevicesList.value = BleService.getConnectedDevices();
   const info = BleService.getConnectedDeviceInfo();
   connectedDeviceName.value = info ? info.name : "";
+  activeBleTarget.value = BleService.getActiveTarget();
+}
+
+function onBleTargetChange() {
+  BleService.setActiveTarget(activeBleTarget.value);
 }
 
 async function connectBle() {
+  if (connectedDevicesList.value.length >= 2) {
+    statusMessage.value = "Maksimal 2 Leanbot sudah terhubung!";
+    return;
+  }
   try {
     statusMessage.value = "Membuka jendela pemindaian Bluetooth...";
     const peripherals = await BleService.startScanning();
@@ -415,9 +448,9 @@ async function connectBle() {
 
 async function disconnectBle() {
   try {
-    await BleService.disconnectDevice();
+    await BleService.disconnectAll();
     checkBle();
-    statusMessage.value = "Koneksi Bluetooth diputuskan.";
+    statusMessage.value = "Semua koneksi Bluetooth diputuskan.";
   } catch (err) {
     statusMessage.value = `Error disconnect: ${err.message || err}`;
   }
@@ -499,7 +532,7 @@ async function sendRawBle(cmd) {
     statusMessage.value = `Gagal kirim "${cmd}": Robot BLE belum terhubung!`;
     throw new Error("Robot BLE belum terhubung");
   }
-  await BleService.sendCommand(cmd);
+  await BleService.sendCommand(cmd, activeBleTarget.value);
 }
 
 async function executeMission(startBatchNum = 1, startInstNum = 1) {
@@ -606,9 +639,9 @@ async function emergencyStop() {
   abortExecution = true;
   isExecuting.value = false;
   try {
-    await sendRawBle("EMERGENCY_STOP");
+    await BleService.sendCommand("EMERGENCY_STOP", "all");
     statusMessage.value =
-      "EMERGENCY STOP DIKIRIM! Robot dihentikan seketika dan semua variabel batch direset.";
+      "EMERGENCY STOP DIKIRIM KE SEMUA ROBOT! Robot dihentikan seketika dan semua variabel batch direset.";
   } catch (err) {
     statusMessage.value = `Emergency Stop gagal: ${err.message || err}`;
   }

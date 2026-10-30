@@ -25,22 +25,38 @@
           <h3>
             {{
               isBleConnected
-                ? connectedDeviceName
-                  ? `${connectedDeviceName}`
-                  : "BLE CONNECTED"
+                ? connectedDevicesList.length === 2
+                  ? `2 ROBOT: ${connectedDevicesList.map((d) => d.name).join(' & ')}`
+                  : `1 ROBOT: ${connectedDeviceName || 'BLE CONNECTED'}`
                 : "BLE DISCONNECTED"
             }}
           </h3>
         </div>
 
+        <select
+          v-if="connectedDevicesList.length > 1"
+          v-model="activeBleTarget"
+          @change="onBleTargetChange"
+          class="bg-white border-3 border-black rounded-2xl px-3 py-3 text-xs md:text-sm font-black uppercase font-mono shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] cursor-pointer"
+        >
+          <option value="all">📢 SEMUA ROBOT (BROADCAST)</option>
+          <option
+            v-for="(dev, idx) in connectedDevicesList"
+            :key="dev.id"
+            :value="dev.id"
+          >
+            🤖 R{{ idx + 1 }}: {{ dev.name }}
+          </option>
+        </select>
+
         <button
-          v-if="!isBleConnected"
+          v-if="connectedDevicesList.length < 2"
           type="button"
           @click="connectBle"
           class="bg-blue-600 text-white font-black text-sm md:text-base py-3 px-5 rounded-2xl border-4 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:bg-blue-700 active:translate-y-1 active:shadow-none transition-all cursor-pointer flex items-center gap-2"
         >
           <span>📡</span>
-          <span>HUBUNGKAN BLE</span>
+          <span>{{ connectedDevicesList.length === 1 ? '+ ROBOT 2' : 'HUBUNGKAN BLE' }}</span>
         </button>
 
         <button
@@ -237,7 +253,7 @@
           rows="3"
           :placeholder="`KETIK ATAU KLIK TOMBOL INSTRUKSI UNTUK ${activeBatchDisplayName} (CONTOH: MAJU:10;KANAN:90;CAPIT;END)...`"
           class="w-full font-mono text-base md:text-lg font-black bg-white border-4 border-black p-4 rounded-2xl shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] focus:outline-none focus:bg-yellow-100 select-text"
-          :class="!isCurrentBatchEnabled ? 'bg-gray-100 opacity-70' : ''"
+          :class="!isCurrentBatchEnabled ? 'bg-amber-50' : ''"
         ></textarea>
       </div>
 
@@ -273,6 +289,30 @@
 
     <div class="space-y-6">
       <div
+        v-if="!isCurrentBatchEnabled"
+        class="border-4 border-black p-4 rounded-2xl bg-amber-200 text-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 select-none"
+      >
+        <div class="flex items-center gap-3">
+          <span class="text-2xl">🚫</span>
+          <div>
+            <p class="font-black text-sm uppercase">
+              BATCH {{ activeBatchIndex + 1 }} SEDANG DINONAKTIFKAN
+            </p>
+            <p class="font-bold text-xs uppercase opacity-90">
+              Semua tombol instruksi dinonaktifkan. Anda tetap dapat mengedit instruksi langsung melalui textarea di atas.
+            </p>
+          </div>
+        </div>
+        <button
+          type="button"
+          @click="toggleActiveBatchEnabled"
+          class="font-black text-xs uppercase bg-green-500 hover:bg-green-400 text-black border-2 border-black px-3.5 py-2 rounded-xl cursor-pointer shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] active:translate-y-0.5 active:shadow-none transition-all shrink-0"
+        >
+          AKTIFKAN BATCH
+        </button>
+      </div>
+
+      <div
         v-for="cat in INSTRUCTION_CATEGORIES"
         :key="cat.id"
         class="space-y-4"
@@ -290,6 +330,7 @@
             :key="item.alias"
             :alias="item.alias"
             :label="item.label"
+            :disabled="!isCurrentBatchEnabled"
             :func="(p) => executeTestInstruction(item.alias, p)"
           />
         </div>
@@ -402,6 +443,8 @@ const currentBatchString = ref("");
 const instructionList = ref([]);
 const isBleConnected = ref(false);
 const connectedDeviceName = ref("");
+const connectedDevicesList = ref([]);
+const activeBleTarget = ref("all");
 const statusMessage = ref("");
 const lastSentCommand = ref("");
 const isImportModalOpen = ref(false);
@@ -418,6 +461,7 @@ function goToProductionArea() {
 
 let unsubscribeState = null;
 let removeDisconnectListener = null;
+let removeConnectListener = null;
 
 const isCurrentBatchEnabled = computed(() => {
   return batchesEnabled.value[activeBatchIndex.value] !== false;
@@ -446,11 +490,15 @@ onMounted(() => {
   removeDisconnectListener = BleService.onDisconnect(() => {
     checkBle();
   });
+  removeConnectListener = BleService.onConnect(() => {
+    checkBle();
+  });
 });
 
 onUnmounted(() => {
   if (unsubscribeState) unsubscribeState();
   if (removeDisconnectListener) removeDisconnectListener();
+  if (removeConnectListener) removeConnectListener();
 });
 
 function refreshState() {
@@ -570,11 +618,21 @@ function getInstructionsByCategory(catId) {
 
 function checkBle() {
   isBleConnected.value = BleService.isConnected();
+  connectedDevicesList.value = BleService.getConnectedDevices();
   const info = BleService.getConnectedDeviceInfo();
   connectedDeviceName.value = info ? info.name : "";
+  activeBleTarget.value = BleService.getActiveTarget();
+}
+
+function onBleTargetChange() {
+  BleService.setActiveTarget(activeBleTarget.value);
 }
 
 async function connectBle() {
+  if (connectedDevicesList.value.length >= 2) {
+    statusMessage.value = "Maksimal 2 Leanbot sudah terhubung!";
+    return;
+  }
   try {
     statusMessage.value = "Membuka jendela pemindaian Bluetooth...";
     const peripherals = await BleService.startScanning();
@@ -592,9 +650,9 @@ async function connectBle() {
 
 async function disconnectBle() {
   try {
-    await BleService.disconnectDevice();
+    await BleService.disconnectAll();
     checkBle();
-    statusMessage.value = "Koneksi Bluetooth diputuskan.";
+    statusMessage.value = "Semua koneksi Bluetooth diputuskan.";
   } catch (err) {
     statusMessage.value = `Error disconnect: ${err.message || err}`;
   }
@@ -605,7 +663,7 @@ async function sendRawBle(cmd) {
     statusMessage.value = `Gagal kirim "${cmd}": Robot BLE belum terhubung!`;
     throw new Error("Robot BLE belum terhubung");
   }
-  await BleService.sendCommand(cmd);
+  await BleService.sendCommand(cmd, activeBleTarget.value);
   lastSentCommand.value = cmd;
   statusMessage.value = `Berhasil kirim: ${cmd}`;
 }
@@ -744,9 +802,10 @@ async function runProdMission() {
 async function emergencyStop() {
   abortBatchExecution = true;
   try {
-    await sendRawBle("EMERGENCY_STOP");
+    await BleService.sendCommand("EMERGENCY_STOP", "all");
+    lastSentCommand.value = "EMERGENCY_STOP";
     statusMessage.value =
-      "EMERGENCY STOP DIKIRIM! Robot dihentikan dan semua batch direset.";
+      "EMERGENCY STOP DIKIRIM KE SEMUA ROBOT! Robot dihentikan dan semua batch direset.";
   } catch (err) {
     statusMessage.value = `Emergency Stop gagal: ${err.message || err}`;
   }

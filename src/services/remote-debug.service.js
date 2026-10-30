@@ -261,24 +261,33 @@ class RemoteDebugService {
 
   saveState(state) {
     try {
+      const currentState = this.readState();
       const batches =
         Array.isArray(state.batches) && state.batches.length === 10
           ? state.batches
-          : Array(10).fill("");
+          : Array.isArray(currentState.batches) && currentState.batches.length === 10
+            ? currentState.batches
+            : Array(10).fill("");
       const batchesEnabled =
         Array.isArray(state.batchesEnabled) && state.batchesEnabled.length === 10
           ? state.batchesEnabled.map((b) => b !== false)
-          : Array(10).fill(true);
+          : Array.isArray(currentState.batchesEnabled) && currentState.batchesEnabled.length === 10
+            ? currentState.batchesEnabled.map((b) => b !== false)
+            : Array(10).fill(true);
       const batchNames =
         Array.isArray(state.batchNames) && state.batchNames.length === 10
           ? state.batchNames.map((n) => String(n || ""))
-          : Array(10).fill("");
+          : Array.isArray(currentState.batchNames) && currentState.batchNames.length === 10
+            ? currentState.batchNames.map((n) => String(n || ""))
+            : Array(10).fill("");
       const activeBatchIndex =
         typeof state.activeBatchIndex === "number" &&
         state.activeBatchIndex >= 0 &&
         state.activeBatchIndex < 10
           ? state.activeBatchIndex
-          : 0;
+          : typeof currentState.activeBatchIndex === "number"
+            ? currentState.activeBatchIndex
+            : 0;
       const currentString = batches[activeBatchIndex] || "";
       const instructions = state.instructions || this.parseInstructionString(currentString);
 
@@ -289,7 +298,7 @@ class RemoteDebugService {
         activeBatchIndex,
         instructionString: currentString,
         instructions,
-        history: state.history || [],
+        history: state.history || currentState.history || [],
         lastUpdated: new Date().toISOString(),
       };
       localStorage.setItem(STORAGE_KEY_STATE, JSON.stringify(normalizedState));
@@ -554,6 +563,7 @@ class RemoteDebugService {
     const updatedHistory = [instructionItem, ...currentState.history];
 
     return this.saveState({
+      ...currentState,
       batches,
       activeBatchIndex: targetIdx,
       instructionString: batches[targetIdx],

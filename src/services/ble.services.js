@@ -1,29 +1,40 @@
 const BLE_SERVICE = "0000ffe0-0000-1000-8000-00805f9b34fb";
 const BLE_CHARACTERISTIC = "0000ffe1-0000-1000-8000-00805f9b34fb";
+const MAX_CONNECTED_DEVICES = 2;
 
 class BleService {
   constructor() {
-    this.connectedDevice = null;
-    this.connectedServer = null;
+    this.connectedDevices = new Map();
     this.discoveredPeripherals = new Map();
     this.serviceUUID = BLE_SERVICE;
     this.characteristicUUID = BLE_CHARACTERISTIC;
     this.disconnectListeners = new Set();
     this.connectListeners = new Set();
     this.dataListeners = new Set();
+    this.activeTargetId = "all";
     this._onGattDisconnected = this._onGattDisconnected.bind(this);
   }
 
+  get connectedServer() {
+    const list = this.getConnectedDevices();
+    return list.length > 0 ? list[0].server : null;
+  }
+
+  get connectedDevice() {
+    const list = this.getConnectedDevices();
+    return list.length > 0 ? list[0].device : null;
+  }
+
   _onGattDisconnected(event) {
-    console.log("[BLE] GATT Server terputus secara eksternal:", event);
-    const prevDevice = this.connectedDevice;
-    this.connectedDevice = null;
-    this.connectedServer = null;
+    const device = event.target;
+    if (!device) return;
+    const prev = this.connectedDevices.get(device.id);
+    this.connectedDevices.delete(device.id);
     this.disconnectListeners.forEach((listener) => {
       try {
-        listener(prevDevice);
+        listener(prev ? prev.device : device);
       } catch (e) {
-        console.error("[BLE] Error pada disconnect listener:", e);
+        console.error(e);
       }
     });
   }
@@ -49,155 +60,241 @@ class BleService {
     };
   }
 
-  _notifyDataListeners(data) {
+  _notifyDataListeners(data, device = null) {
     this.dataListeners.forEach((fn) => {
       try {
-        fn(data);
+        fn(data, device);
       } catch (e) {
         console.error(e);
       }
     });
   }
 
+  getConnectedDevices() {
+    return Array.from(this.connectedDevices.values()).map((entry) => ({
+      id: entry.device.id,
+      name: entry.device.name || "LEANBOT",
+      connectedAt: entry.connectedAt,
+      serviceUUID: this.serviceUUID,
+      characteristicUUID: this.characteristicUUID,
+      server: entry.server,
+      characteristic: entry.characteristic,
+      device: entry.device,
+    }));
+  }
+
+  isConnected(deviceId = null) {
+    if (deviceId) {
+      const entry = this.connectedDevices.get(deviceId);
+      return !!(entry && entry.server && entry.server.connected);
+    }
+    return this.getConnectedDevices().some(
+      (entry) => entry.server && entry.server.connected,
+    );
+  }
+
+  getConnectedDeviceInfo(deviceId = null) {
+    const list = this.getConnectedDevices();
+    if (list.length === 0) return null;
+    if (deviceId) {
+      const found = list.find((d) => d.id === deviceId);
+      return found || null;
+    }
+    if (list.length === 1) {
+      return {
+        id: list[0].id,
+        name: list[0].name,
+        connectedAt: list[0].connectedAt,
+        serviceUUID: this.serviceUUID,
+        characteristicUUID: this.characteristicUUID,
+        count: 1,
+        devices: list,
+      };
+    }
+    return {
+      id: list.map((d) => d.id).join(","),
+      name: list.map((d) => d.name).join(" & "),
+      connectedAt: list[0].connectedAt,
+      serviceUUID: this.serviceUUID,
+      characteristicUUID: this.characteristicUUID,
+      count: list.length,
+      devices: list,
+    };
+  }
+
+  setActiveTarget(targetId = "all") {
+    this.activeTargetId = targetId;
+  }
+
+  getActiveTarget() {
+    return this.activeTargetId;
+  }
+
   async startScanning() {
     try {
-      console.log("[BLE] Membuka jendela pemindaian browser...");
-
       const device = await navigator.bluetooth.requestDevice({
         filters: [{ services: [BLE_SERVICE] }],
       });
 
-      this.discoveredPeripherals.clear();
       this.discoveredPeripherals.set(device.id, device);
-      console.log(`[BLE] Perangkat dipilih: ${device.name} [ID: ${device.id}]`);
-
       return this.discoveredPeripherals;
     } catch (error) {
-      console.error("[BLE] Pemindaian dibatalkan atau gagal:", error);
+      console.error(error);
       throw error;
     }
   }
 
   stopScanning() {
-    console.log("[BLE] Pemindaian selesai via browser.");
+    this.discoveredPeripherals.clear();
   }
 
   async connectDevice(peripheralId) {
-    const device = this.discoveredPeripherals.get(peripheralId);
-    if (!device)
-      throw new Error("Perangkat tidak ditemukan. Silakan scan ulang.");
+    if (this.connectedDevices.size >= MAX_CONNECTED_DEVICES) {
+      throw new Error(
+        `Maksimal ${MAX_CONNECTED_DEVICES} Leanbot yang dapat terhubung sekaligus. Putuskan salah satu robot terlebih dahulu.`,
+      );
+    }
 
-    console.log(`[BLE] Menghubungkan ke ${device.name}...`);
+    const device = this.discoveredPeripherals.get(peripheralId);
+    if (!device) {
+      throw new Error("Perangkat tidak ditemukan. Silakan scan ulang.");
+    }
+
+    if (this.connectedDevices.has(device.id)) {
+      throw new Error(`Perangkat ${device.name || device.id} sudah terhubung.`);
+    }
 
     if (device.gatt && device.gatt.connected) {
       await device.gatt.disconnect();
     }
 
     try {
-      device.removeEventListener("gattserverdisconnected", this._onGattDisconnected);
-      device.addEventListener("gattserverdisconnected", this._onGattDisconnected);
+      device.removeEventListener(
+        "gattserverdisconnected",
+        this._onGattDisconnected,
+      );
+      device.addEventListener(
+        "gattserverdisconnected",
+        this._onGattDisconnected,
+      );
     } catch (e) {
-      console.warn("[BLE] Gagal memasang event listener gattserverdisconnected:", e);
+      console.warn(e);
     }
 
-    this.connectedServer = await device.gatt.connect();
-    this.connectedDevice = device;
+    const server = await device.gatt.connect();
 
+    let characteristic = null;
     try {
-      const service = await this.connectedServer.getPrimaryService(this.serviceUUID);
-      const characteristic = await service.getCharacteristic(this.characteristicUUID);
-      if (characteristic.properties.notify || characteristic.properties.indicate) {
+      const service = await server.getPrimaryService(this.serviceUUID);
+      characteristic = await service.getCharacteristic(
+        this.characteristicUUID,
+      );
+      if (
+        characteristic.properties.notify ||
+        characteristic.properties.indicate
+      ) {
         await characteristic.startNotifications();
-        characteristic.addEventListener("characteristicvaluechanged", (event) => {
-          const decoder = new TextDecoder();
-          const str = decoder.decode(event.target.value);
-          this._notifyDataListeners(str);
-        });
+        characteristic.addEventListener(
+          "characteristicvaluechanged",
+          (event) => {
+            const decoder = new TextDecoder();
+            const str = decoder.decode(event.target.value);
+            this._notifyDataListeners(str, device);
+          },
+        );
       }
     } catch (e) {
-      console.warn("[BLE] Gagal setup notifications:", e);
+      console.warn(e);
     }
+
+    const entry = {
+      device,
+      server,
+      characteristic,
+      connectedAt: new Date().toLocaleTimeString(),
+    };
+    this.connectedDevices.set(device.id, entry);
 
     this.connectListeners.forEach((listener) => {
       try {
         listener(device);
       } catch (e) {
-        console.error("[BLE] Error pada connect listener:", e);
+        console.error(e);
       }
     });
 
     return device;
   }
 
-  async disconnectDevice() {
-    if (this.connectedDevice && this.connectedDevice.gatt) {
-      try {
-        if (this.connectedDevice.gatt.connected) {
-          this.connectedDevice.gatt.disconnect();
+  async disconnectDevice(deviceId = null) {
+    if (deviceId) {
+      const entry = this.connectedDevices.get(deviceId);
+      if (entry && entry.server && entry.server.connected) {
+        try {
+          entry.server.disconnect();
+        } catch (e) {
+          console.warn(e);
         }
-      } catch (e) {
-        console.warn("[BLE] Error saat disconnect:", e);
       }
-      console.log("[BLE] Koneksi terputus.");
+      this.connectedDevices.delete(deviceId);
+      this.disconnectListeners.forEach((listener) => {
+        try {
+          listener(entry ? entry.device : { id: deviceId });
+        } catch (e) {
+          console.error(e);
+        }
+      });
+      return;
     }
-    this.connectedDevice = null;
-    this.connectedServer = null;
-  }
 
-  isConnected() {
-    return !!(
-      this.connectedServer &&
-      this.connectedServer.connected &&
-      this.connectedDevice
-    );
-  }
-
-  getConnectedDeviceInfo() {
-    if (this.isConnected()) {
-      return {
-        id: this.connectedDevice.id,
-        name: this.connectedDevice.name || "UNKNOWN HARDWARE",
-        serviceUUID: this.serviceUUID,
-        characteristicUUID: this.characteristicUUID,
-      };
+    const entries = Array.from(this.connectedDevices.values());
+    for (const entry of entries) {
+      if (entry.server && entry.server.connected) {
+        try {
+          entry.server.disconnect();
+        } catch (e) {
+          console.warn(e);
+        }
+      }
     }
-    return null;
+    this.connectedDevices.clear();
+    this.disconnectListeners.forEach((listener) => {
+      try {
+        listener(null);
+      } catch (e) {
+        console.error(e);
+      }
+    });
   }
 
-  async readCharacteristic(serviceUUID, characteristicUUID) {
-    if (!this.connectedServer)
-      throw new Error("Tidak ada perangkat yang terhubung.");
-
-    const service = await this.connectedServer.getPrimaryService(serviceUUID);
-    const characteristic = await service.getCharacteristic(characteristicUUID);
-    const value = await characteristic.readValue();
-    return value;
+  async disconnectAll() {
+    await this.disconnectDevice(null);
   }
 
-  async writeCharacteristic(
-    serviceUUID,
-    characteristicUUID,
-    dataBuffer,
-    withoutResponse = false,
-  ) {
-    if (!this.connectedServer)
-      throw new Error("Tidak ada perangkat yang terhubung.");
+  async _sendToCharacteristic(characteristic, fullCmd) {
+    if (!characteristic) return;
+    const encoder = new TextEncoder();
+    const data = encoder.encode(fullCmd);
+    const CHUNK_SIZE = 20;
 
-    const service = await this.connectedServer.getPrimaryService(serviceUUID);
-    const characteristic = await service.getCharacteristic(characteristicUUID);
-
-    if (withoutResponse) {
-      await characteristic.writeValueWithoutResponse(dataBuffer);
-    } else {
-      await characteristic.writeValueWithResponse(dataBuffer);
+    for (let i = 0; i < data.length; i += CHUNK_SIZE) {
+      const chunk = data.slice(i, i + CHUNK_SIZE);
+      try {
+        await characteristic.writeValueWithoutResponse(chunk);
+      } catch {
+        await characteristic.writeValueWithResponse(chunk);
+      }
+      if (data.length > CHUNK_SIZE) {
+        await new Promise((resolve) => setTimeout(resolve, 25));
+      }
     }
-    console.log("[BLE] Data berhasil dikirim.");
   }
 
-  async sendCommand(commandStr) {
+  async sendCommand(commandStr, targetDeviceId = null) {
     if (!this.isConnected()) {
       throw new Error("Perangkat Bluetooth belum terhubung!");
     }
+
     const trimmed = commandStr.trim();
     let rawCmd = trimmed;
     const upper = trimmed.toUpperCase();
@@ -211,30 +308,22 @@ class BleService {
       rawCmd = `CODE;${trimmed}`;
     }
     const fullCmd = rawCmd.endsWith("\n") ? rawCmd : `${rawCmd}\n`;
-    const encoder = new TextEncoder();
-    const data = encoder.encode(fullCmd);
-    const CHUNK_SIZE = 20;
-    for (let i = 0; i < data.length; i += CHUNK_SIZE) {
-      const chunk = data.slice(i, i + CHUNK_SIZE);
-      try {
-        await this.writeCharacteristic(
-          this.serviceUUID,
-          this.characteristicUUID,
-          chunk,
-          true,
-        );
-      } catch {
-        await this.writeCharacteristic(
-          this.serviceUUID,
-          this.characteristicUUID,
-          chunk,
-          false,
-        );
-      }
-      if (data.length > CHUNK_SIZE) {
-        await new Promise((resolve) => setTimeout(resolve, 25));
+
+    const target = targetDeviceId || this.activeTargetId || "all";
+    const devices = this.getConnectedDevices();
+
+    if (target !== "all") {
+      const entry = devices.find((d) => d.id === target);
+      if (entry && entry.characteristic) {
+        await this._sendToCharacteristic(entry.characteristic, fullCmd);
+        return;
       }
     }
+
+    const sendPromises = devices
+      .filter((d) => d.characteristic)
+      .map((d) => this._sendToCharacteristic(d.characteristic, fullCmd));
+    await Promise.all(sendPromises);
   }
 
   waitForAcknowledgment(expectedPrefix, timeoutMs = 5000) {
@@ -294,7 +383,10 @@ class BleService {
       });
 
       timer = setTimeout(() => {
-        finish({ success: false, reason: "Batas waktu tunggu misi habis (Timeout)" });
+        finish({
+          success: false,
+          reason: "Batas waktu tunggu misi habis (Timeout)",
+        });
       }, timeoutMs);
     });
   }

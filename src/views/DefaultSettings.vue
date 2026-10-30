@@ -26,11 +26,13 @@
           ></span>
           <h3>
             {{
-              isBleConnected
-                ? connectedDeviceName
-                  ? `${connectedDeviceName}`
-                  : "BLE CONNECTED"
-                : "BLE DISCONNECTED"
+              connectedDevicesCount > 1
+                ? `${connectedDevicesCount} ROBOT CONNECTED`
+                : isBleConnected
+                  ? connectedDeviceName
+                    ? `${connectedDeviceName}`
+                    : "BLE CONNECTED"
+                  : "BLE DISCONNECTED"
             }}
           </h3>
         </div>
@@ -188,6 +190,8 @@ const CRUCIAL_PARAMS = {
 
 const isBleConnected = ref(false);
 const connectedDeviceName = ref("");
+const connectedDevicesList = ref([]);
+const connectedDevicesCount = computed(() => connectedDevicesList.value.length);
 const statusMessage = ref("");
 
 function buildInitialFormData() {
@@ -222,6 +226,7 @@ onUnmounted(() => {
 
 function checkBle() {
   isBleConnected.value = BleService.isConnected();
+  connectedDevicesList.value = BleService.getConnectedDevices();
   const info = BleService.getConnectedDeviceInfo();
   connectedDeviceName.value = info ? info.name : "";
 }

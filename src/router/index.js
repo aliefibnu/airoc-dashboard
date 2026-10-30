@@ -42,9 +42,7 @@ const router = createRouter({
 
 router.beforeEach((to) => {
   if (to.path === "/") {
-    const isConnected =
-      BleService.connectedServer && BleService.connectedServer.connected;
-    return isConnected ? "/remote" : "/ble-dashboard";
+    return BleService.isConnected() ? "/remote" : "/ble-dashboard";
   }
 });
 
