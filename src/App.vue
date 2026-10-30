@@ -29,6 +29,12 @@
             >IOT</RouterLink
           >
           <RouterLink
+            to="/code"
+            class="text-lg font-bold uppercase hover:text-yellow-900 transition-colors"
+            active-class="text-yellow-600"
+            >CODE</RouterLink
+          >
+          <RouterLink
             to="/default-settings"
             class="text-lg font-bold uppercase hover:text-yellow-900 transition-colors"
             active-class="text-yellow-600"
@@ -43,7 +49,7 @@
     </main>
 
     <nav
-      class="md:hidden fixed bottom-0 left-0 right-0 bg-yellow-200 text-black p-4 grid grid-cols-5 text-center border-t-4 border-yellow-400 shadow-2xl z-50"
+      class="md:hidden fixed bottom-0 left-0 right-0 bg-yellow-200 text-black p-4 grid grid-cols-6 text-center border-t-4 border-yellow-400 shadow-2xl z-50"
     >
       <RouterLink
         to="/ble-dashboard"
@@ -68,6 +74,12 @@
         class="text-xs font-black uppercase"
         active-class="text-blue-600"
         >IOT</RouterLink
+      >
+      <RouterLink
+        to="/code"
+        class="text-xs font-black uppercase"
+        active-class="text-blue-600"
+        >CODE</RouterLink
       >
       <RouterLink
         to="/default-settings"
