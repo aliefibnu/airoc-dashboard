@@ -1218,11 +1218,6 @@ void executeInstruction(const Instruction& inst) {
   }
 }
 
-    default:
-      break;
-  }
-}
-
 void executeAllBatches() {
   emergencyFlag = false;
   updateRobotState(STATE_EXECUTING);
