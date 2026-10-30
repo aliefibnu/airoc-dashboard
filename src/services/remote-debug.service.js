@@ -1,4 +1,8 @@
 import { INSTRUCTION_ALIASES } from "@/data/instruction-aliases.js";
+import {
+  getPresetString,
+  isPresetInstruction,
+} from "@/data/preset-instructions.js";
 import instructionDefaultsService from "@/services/instruction-defaults.service.js";
 
 const STORAGE_KEY_STATE = "airoc_remote_debug_state";
@@ -90,7 +94,16 @@ class RemoteDebugService {
     }
 
     if (paramPart.length > 0) {
+      if (this.isPreset(cmd)) {
+        const pStr = this.getPresetString(cmd, paramPart);
+        if (pStr) return pStr;
+      }
       return `${cmd}:${paramPart}`;
+    }
+
+    if (this.isPreset(cmd)) {
+      const pStr = this.getPresetString(cmd);
+      if (pStr) return pStr;
     }
 
     const defs = instructionDefaultsService.getAllDefaults();
@@ -500,8 +513,106 @@ class RemoteDebugService {
     });
   }
 
+  isPreset(nameOrAlias) {
+    return isPresetInstruction(nameOrAlias);
+  }
+
+  getPresetString(nameOrAlias, params) {
+    return getPresetString(nameOrAlias, params);
+  }
+
+  addTokens(tokensList, historyItem = null) {
+    if (!Array.isArray(tokensList) || tokensList.length === 0) {
+      return this.readState();
+    }
+    const currentState = this.readState();
+    let targetIdx = currentState.activeBatchIndex;
+    const batches = [...currentState.batches];
+
+    for (const rawToken of tokensList) {
+      const token = String(rawToken || "").trim();
+      if (!token) continue;
+
+      let tokens = batches[targetIdx]
+        ? batches[targetIdx].split(";").map((t) => t.trim()).filter(Boolean)
+        : [];
+
+      if (tokens.length >= 12) {
+        let foundSlot = -1;
+        for (let next = targetIdx + 1; next < 10; next++) {
+          const nextTokens = batches[next]
+            ? batches[next].split(";").map((t) => t.trim()).filter(Boolean)
+            : [];
+          if (nextTokens.length < 12) {
+            foundSlot = next;
+            break;
+          }
+        }
+        if (foundSlot === -1) {
+          for (let prev = 0; prev < targetIdx; prev++) {
+            const prevTokens = batches[prev]
+              ? batches[prev].split(";").map((t) => t.trim()).filter(Boolean)
+              : [];
+            if (prevTokens.length < 12) {
+              foundSlot = prev;
+              break;
+            }
+          }
+        }
+
+        if (foundSlot !== -1) {
+          targetIdx = foundSlot;
+          tokens = batches[targetIdx]
+            ? batches[targetIdx].split(";").map((t) => t.trim()).filter(Boolean)
+            : [];
+        } else {
+          break;
+        }
+      }
+
+      tokens.push(token);
+      batches[targetIdx] = tokens.join(";");
+    }
+
+    const updatedHistory = historyItem
+      ? [historyItem, ...currentState.history]
+      : currentState.history;
+
+    return this.saveState({
+      ...currentState,
+      batches,
+      activeBatchIndex: targetIdx,
+      instructionString: batches[targetIdx],
+      instructions: this.parseInstructionString(batches[targetIdx]),
+      history: updatedHistory,
+    });
+  }
+
   addInstruction(nameOrLabel, params = []) {
     const alias = this.getAlias(nameOrLabel);
+    if (this.isPreset(alias)) {
+      const presetStr = this.getPresetString(alias, params);
+      if (!presetStr) {
+        return this.readState();
+      }
+      const tokens = presetStr
+        .split(";")
+        .map((t) => t.trim())
+        .filter(Boolean);
+      const cleanParams = this.normalizeParams(params);
+      const id = `inst_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
+      const instructionItem = {
+        id,
+        alias,
+        name: String(nameOrLabel).trim(),
+        params: cleanParams,
+        formatted: presetStr,
+        timestamp: new Date().toISOString(),
+        formattedTime: new Date().toLocaleTimeString(),
+      };
+      return this.addTokens(tokens, instructionItem);
+    }
+
     const cleanParams = this.normalizeParams(params);
     const formatted = this.formatSingleInstruction(alias, cleanParams);
     const id = `inst_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
@@ -516,60 +627,7 @@ class RemoteDebugService {
       formattedTime: new Date().toLocaleTimeString(),
     };
 
-    const currentState = this.readState();
-    let targetIdx = currentState.activeBatchIndex;
-    const batches = [...currentState.batches];
-
-    let tokens = batches[targetIdx]
-      ? batches[targetIdx].split(";").map((t) => t.trim()).filter(Boolean)
-      : [];
-
-    if (tokens.length >= 12) {
-      let foundSlot = -1;
-      for (let next = targetIdx + 1; next < 10; next++) {
-        const nextTokens = batches[next]
-          ? batches[next].split(";").map((t) => t.trim()).filter(Boolean)
-          : [];
-        if (nextTokens.length < 12) {
-          foundSlot = next;
-          break;
-        }
-      }
-      if (foundSlot === -1) {
-        for (let prev = 0; prev < targetIdx; prev++) {
-          const prevTokens = batches[prev]
-            ? batches[prev].split(";").map((t) => t.trim()).filter(Boolean)
-            : [];
-          if (prevTokens.length < 12) {
-            foundSlot = prev;
-            break;
-          }
-        }
-      }
-
-      if (foundSlot !== -1) {
-        targetIdx = foundSlot;
-        tokens = batches[targetIdx]
-          ? batches[targetIdx].split(";").map((t) => t.trim()).filter(Boolean)
-          : [];
-      } else {
-        return currentState;
-      }
-    }
-
-    tokens.push(formatted);
-    batches[targetIdx] = tokens.join(";");
-
-    const updatedHistory = [instructionItem, ...currentState.history];
-
-    return this.saveState({
-      ...currentState,
-      batches,
-      activeBatchIndex: targetIdx,
-      instructionString: batches[targetIdx],
-      instructions: this.parseInstructionString(batches[targetIdx]),
-      history: updatedHistory,
-    });
+    return this.addTokens([formatted], instructionItem);
   }
 
   getInstructionString() {

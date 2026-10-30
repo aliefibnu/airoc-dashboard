@@ -1,3 +1,9 @@
+export {
+  PRESET_INSTRUCTIONS,
+  getPresetString,
+  isPresetInstruction,
+} from "./preset-instructions.js";
+
 export const INSTRUCTION_CATEGORIES = [
   { id: "gerakan", title: "1. GERAKAN DASAR" },
   { id: "gripper", title: "2. GRIPPER & MANIPULASI" },
@@ -5,6 +11,7 @@ export const INSTRUCTION_CATEGORIES = [
   { id: "feedback", title: "4. FEEDBACK & LED" },
   { id: "iot_misi", title: "5. IOT & STATUS MISI" },
   { id: "keselamatan", title: "6. KESELAMATAN" },
+  { id: "preset", title: "7. PRESET" },
 ];
 
 export const INSTRUCTION_ALIASES = [
@@ -553,5 +560,113 @@ export const INSTRUCTION_ALIASES = [
     categoryId: "keselamatan",
     color: "red",
     params: [],
+  },
+  {
+    name: "PINGGIR_AMBIL",
+    alias: "PINGGIR_AMBIL",
+    label: "PINGGIR AMBIL",
+    description: "Preset Pinggir Ambil",
+    category: "7. PRESET",
+    categoryId: "preset",
+    color: "purple",
+    isPreset: true,
+    params: [
+      {
+        name: "arah",
+        label: "ARAH",
+        type: "select",
+        defaultValue: "KANAN",
+        options: [
+          { label: "👉 KANAN", value: "KANAN" },
+          { label: "👈 KIRI", value: "KIRI" },
+        ],
+      },
+      {
+        name: "jarak",
+        label: "JARAK",
+        type: "select",
+        defaultValue: "JAUH",
+        options: [
+          { label: "🌐 JAUH", value: "JAUH" },
+          { label: "📍 DEKAT", value: "DEKAT" },
+        ],
+      },
+    ],
+  },
+  {
+    name: "PINGGIR_MASUK",
+    alias: "PINGGIR_MASUK",
+    label: "PINGGIR MASUK",
+    description: "Preset Pinggir Masuk",
+    category: "7. PRESET",
+    categoryId: "preset",
+    color: "purple",
+    isPreset: true,
+    params: [
+      {
+        name: "arah",
+        label: "OPSI 1: ARAH (KANAN/KIRI)",
+        type: "select",
+        defaultValue: "KANAN",
+        options: [
+          { label: "👉 KANAN", value: "KANAN" },
+          { label: "👈 KIRI", value: "KIRI" },
+        ],
+      },
+      {
+        name: "jarak",
+        label: "OPSI 2: JARAK (JAUH/DEKAT)",
+        type: "select",
+        defaultValue: "JAUH",
+        options: [
+          { label: "🌐 JAUH", value: "JAUH" },
+          { label: "📍 DEKAT", value: "DEKAT" },
+        ],
+      },
+    ],
+  },
+  {
+    name: "TENGAH_AMBIL",
+    alias: "TENGAH_AMBIL",
+    label: "TENGAH AMBIL",
+    description: "Preset Tengah Ambil",
+    category: "7. PRESET",
+    categoryId: "preset",
+    color: "purple",
+    isPreset: true,
+    params: [
+      {
+        name: "arah",
+        label: "OPSI 1: ARAH (KANAN/KIRI)",
+        type: "select",
+        defaultValue: "KANAN",
+        options: [
+          { label: "👉 KANAN", value: "KANAN" },
+          { label: "👈 KIRI", value: "KIRI" },
+        ],
+      },
+    ],
+  },
+  {
+    name: "TENGAH_MASUK",
+    alias: "TENGAH_MASUK",
+    label: "TENGAH MASUK",
+    description: "Preset Tengah Masuk",
+    category: "7. PRESET",
+    categoryId: "preset",
+    color: "purple",
+    isPreset: true,
+    params: [
+      {
+        name: "arah",
+        label: "OPSI 1: ARAH (KANAN/KIRI)",
+        type: "select",
+        defaultValue: "KANAN",
+        options: [
+          { label: "👉 KANAN", value: "KANAN" },
+          { label: "👈 KIRI", value: "KIRI" },
+        ],
+      },
+    ],
   },
 ];

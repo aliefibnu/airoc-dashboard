@@ -122,6 +122,10 @@ import { ref, reactive, computed, onMounted, onUnmounted } from "vue";
 import remoteDebugService from "@/services/remote-debug.service.js";
 import instructionDefaultsService from "@/services/instruction-defaults.service.js";
 import { INSTRUCTION_ALIASES } from "@/data/instruction-aliases.js";
+import {
+  getPresetString,
+  isPresetInstruction,
+} from "@/data/preset-instructions.js";
 
 const props = defineProps({
   label: {
@@ -361,6 +365,18 @@ function getPayload() {
 
 async function handleTest() {
   const payload = getPayload();
+  const targetLabelOrAlias = targetAlias.value;
+  if (isPresetInstruction(targetLabelOrAlias)) {
+    const pStr = getPresetString(targetLabelOrAlias, payload);
+    if (!pStr) {
+      testFeedbackText.value = "PRESET BELUM TERSEDIA UNTUK PILIHAN INI";
+      testExecuted.value = true;
+      setTimeout(() => {
+        testExecuted.value = false;
+      }, 2500);
+      return;
+    }
+  }
   try {
     if (typeof props.func === "function") {
       await props.func(payload, { ...inputValues });
@@ -383,6 +399,18 @@ async function handleTest() {
 async function handleConfirm() {
   const payload = getPayload();
   const targetLabelOrAlias = targetAlias.value;
+
+  if (isPresetInstruction(targetLabelOrAlias)) {
+    const pStr = getPresetString(targetLabelOrAlias, payload);
+    if (!pStr) {
+      testFeedbackText.value = "PRESET BELUM TERSEDIA UNTUK PILIHAN INI";
+      testExecuted.value = true;
+      setTimeout(() => {
+        testExecuted.value = false;
+      }, 2500);
+      return;
+    }
+  }
 
   const debugState = remoteDebugService.addInstruction(
     targetLabelOrAlias,

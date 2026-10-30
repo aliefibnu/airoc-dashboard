@@ -741,11 +741,19 @@ function resolveInstructionToken(token) {
 
 async function executeTestInstruction(name, payload) {
   let cmd = name;
-  const clean = remoteDebugService.normalizeParams(payload);
-  if (clean.length > 0) {
-    cmd = `${name}:${clean.join(",")}`;
+  if (remoteDebugService.isPreset(name)) {
+    const pStr = remoteDebugService.getPresetString(name, payload);
+    if (!pStr) {
+      throw new Error("Preset belum tersedia untuk pilihan ini");
+    }
+    cmd = pStr;
   } else {
-    cmd = resolveInstructionToken(name);
+    const clean = remoteDebugService.normalizeParams(payload);
+    if (clean.length > 0) {
+      cmd = `${name}:${clean.join(",")}`;
+    } else {
+      cmd = resolveInstructionToken(name);
+    }
   }
   await sendRawBle(cmd);
   if (name && name.toUpperCase() === "KALIBRASI") {
