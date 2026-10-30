@@ -1,7 +1,7 @@
 export const PRESET_INSTRUCTIONS = {
   PINGGIR_AMBIL: {
     KANAN: {
-      JAUH: "FOLLOW_LINE:1,7,MAJU;BELOK_KANAN:40,5,MAJU;MAJU:20,10;CAPIT;MUNDUR:21,10;MUNDUR_LINE:50,5",
+      JAUH: "",
       DEKAT: "",
     },
     KIRI: {
@@ -20,8 +20,8 @@ export const PRESET_INSTRUCTIONS = {
     },
   },
   TENGAH_AMBIL: {
-    KANAN: "",
-    KIRI: "",
+    KANAN: "KANAN:40,5;MAJU:7,10;CAPIT;MUNDUR:7,10;KIRI:40,5;",
+    KIRI: "KIRI:40,5;MAJU:7,10;CAPIT;MUNDUR:7,10;KANAN:40,5;",
   },
   TENGAH_MASUK: {
     KANAN: "",

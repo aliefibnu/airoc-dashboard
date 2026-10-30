@@ -8,7 +8,9 @@ enum Opcode : uint8_t {
   OP_KANAN,
   OP_KIRI,
   OP_BELOK_KANAN,
+  OP_BELOK_KANAN_REV,
   OP_BELOK_KIRI,
+  OP_BELOK_KIRI_REV,
   OP_STOP,
   OP_SPEED,
   OP_TUNGGU,
@@ -20,6 +22,7 @@ enum Opcode : uint8_t {
   OP_EMERGENCY_STOP,
   OP_END,
   OP_FOLLOW_LINE,
+  OP_FOLLOW_LINE_REV,
   OP_MAJU_LINE,
   OP_MUNDUR_LINE,
   OP_STOP_LINE,
@@ -35,12 +38,10 @@ enum RobotState : uint8_t {
   STATE_EMERGENCY
 };
 
-struct Instruction {
+struct __attribute__((packed)) Instruction {
   uint8_t opcode;
   int16_t p1;
   int16_t p2;
-  int16_t p3;
-  int16_t p4;
 };
 
 #define MAX_BATCHES 10
@@ -59,7 +60,7 @@ int16_t currentSpeed = 1000;
 volatile bool emergencyFlag = false;
 RobotState currentRobotState = STATE_READY;
 
-char tokenBuf[48];
+char tokenBuf[36];
 uint8_t tokenLen = 0;
 char prefixBuf[16];
 uint8_t prefixLen = 0;
@@ -89,11 +90,12 @@ void blinkLed(int count, int intervalMs);
 uint8_t parseColorIndex(const char* s);
 CRGB getColorFromIndex(uint8_t idx);
 uint8_t parseMissionIndex(const char* s);
-const char* getMissionKey(uint8_t idx);
+void printMissionKey(uint8_t idx);
 bool parseInstruction(char* str, Instruction& inst);
 void executeInstruction(const Instruction& inst);
 void executeAllBatches();
 void setLineThreshold(int16_t t0, int16_t t1, int16_t t2, int16_t t3);
+void handleSetThresholdString(char* params);
 
 int16_t currentThresholds[4] = {302, 128, 94, 112};
 
@@ -113,6 +115,27 @@ void setLineThreshold(int16_t t0, int16_t t1, int16_t t2, int16_t t3) {
   Serial.print(t3);
   Serial.println(']');
   Leanbot.tone(2000, 80);
+}
+
+void handleSetThresholdString(char* params) {
+  int16_t t[4] = {currentThresholds[0], currentThresholds[1], currentThresholds[2], currentThresholds[3]};
+  uint8_t idx = 0;
+  char* tok = strtok(params, ", \t");
+  while (tok != NULL && idx < 4) {
+    t[idx++] = atoi(tok);
+    tok = strtok(NULL, ", \t");
+  }
+  if (idx == 1) {
+    t[1] = t[0];
+    t[2] = t[0];
+    t[3] = t[0];
+  } else if (idx == 2) {
+    t[2] = t[1];
+    t[3] = t[1];
+  } else if (idx == 3) {
+    t[3] = t[2];
+  }
+  setLineThreshold(t[0], t[1], t[2], t[3]);
 }
 
 int freeRam() {
@@ -161,8 +184,10 @@ void printOpcodeName(uint8_t op) {
     case OP_MUNDUR: Serial.print(F("MUNDUR")); break;
     case OP_KANAN: Serial.print(F("KANAN")); break;
     case OP_KIRI: Serial.print(F("KIRI")); break;
-    case OP_BELOK_KANAN: Serial.print(F("BELOK_KANAN")); break;
-    case OP_BELOK_KIRI: Serial.print(F("BELOK_KIRI")); break;
+    case OP_BELOK_KANAN:
+    case OP_BELOK_KANAN_REV: Serial.print(F("BELOK_KANAN")); break;
+    case OP_BELOK_KIRI:
+    case OP_BELOK_KIRI_REV: Serial.print(F("BELOK_KIRI")); break;
     case OP_STOP: Serial.print(F("STOP")); break;
     case OP_SPEED: Serial.print(F("SPEED")); break;
     case OP_TUNGGU: Serial.print(F("TUNGGU")); break;
@@ -173,7 +198,8 @@ void printOpcodeName(uint8_t op) {
     case OP_LED_KEDIP: Serial.print(F("LED_KEDIP")); break;
     case OP_EMERGENCY_STOP: Serial.print(F("EMG_STOP")); break;
     case OP_END: Serial.print(F("END")); break;
-    case OP_FOLLOW_LINE: Serial.print(F("FOLLOW_LINE")); break;
+    case OP_FOLLOW_LINE:
+    case OP_FOLLOW_LINE_REV: Serial.print(F("FOLLOW_LINE")); break;
     case OP_MAJU_LINE: Serial.print(F("MAJU_LINE")); break;
     case OP_MUNDUR_LINE: Serial.print(F("MUNDUR_LINE")); break;
     case OP_STOP_LINE: Serial.print(F("STOP_LINE")); break;
@@ -185,34 +211,50 @@ void printOpcodeName(uint8_t op) {
 }
 
 void printInstructionInfo(const Instruction& inst) {
-  if (inst.opcode == OP_SET_THRESHOLD) {
-    Serial.print(F("SET_THRESHOLD:"));
-    Serial.print(inst.p1);
-    Serial.print(',');
-    Serial.print(inst.p2);
-    Serial.print(',');
-    Serial.print(inst.p3);
-    Serial.print(',');
-    Serial.print(inst.p4);
-    return;
-  }
   if (inst.opcode == OP_MISI_DONE) {
     Serial.print(F("MISI_DONE:"));
-    Serial.print(getMissionKey(inst.p1));
+    printMissionKey(inst.p1);
     Serial.print(',');
     Serial.print(inst.p2 != 0 ? 1 : 0);
     return;
   }
-  printOpcodeName(inst.opcode);
-  if (inst.p1 != 0 || inst.p2 != 0 || inst.p3 != 0) {
-    Serial.print(':');
+  if (inst.opcode == OP_BELOK_KANAN_REV) {
+    Serial.print(F("BELOK_KANAN:"));
     Serial.print(inst.p1);
-    if (inst.p2 != 0 || inst.p3 < 0) {
+    if (inst.p2 != 0) {
       Serial.print(',');
       Serial.print(inst.p2);
-      if (inst.p3 < 0) {
-        Serial.print(F(",MUNDUR"));
-      }
+    }
+    Serial.print(F(",MUNDUR"));
+    return;
+  }
+  if (inst.opcode == OP_BELOK_KIRI_REV) {
+    Serial.print(F("BELOK_KIRI:"));
+    Serial.print(inst.p1);
+    if (inst.p2 != 0) {
+      Serial.print(',');
+      Serial.print(inst.p2);
+    }
+    Serial.print(F(",MUNDUR"));
+    return;
+  }
+  if (inst.opcode == OP_FOLLOW_LINE_REV) {
+    Serial.print(F("FOLLOW_LINE:"));
+    Serial.print(inst.p1);
+    if (inst.p2 != 0) {
+      Serial.print(',');
+      Serial.print(inst.p2);
+    }
+    Serial.print(F(",MUNDUR"));
+    return;
+  }
+  printOpcodeName(inst.opcode);
+  if (inst.p1 != 0 || inst.p2 != 0) {
+    Serial.print(':');
+    Serial.print(inst.p1);
+    if (inst.p2 != 0) {
+      Serial.print(',');
+      Serial.print(inst.p2);
     }
   }
 }
@@ -234,6 +276,15 @@ bool enqueueBatchToken(uint8_t bIdx) {
       isLegacyCode = false;
       Serial.print(F("[RECV] BATCH:"));
       Serial.println(currentBatchIdx + 1);
+    }
+    tokenLen = 0;
+    tokenBuf[0] = '\0';
+    return true;
+  }
+  if (strncasecmp_P(tokenBuf, PSTR("SET_THRESHOLD:"), 14) == 0 || strncasecmp_P(tokenBuf, PSTR("THRESHOLD:"), 10) == 0 || strncasecmp_P(tokenBuf, PSTR("SET_TREESHOLD:"), 14) == 0) {
+    char* colon = strchr(tokenBuf, ':');
+    if (colon != NULL) {
+      handleSetThresholdString(colon + 1);
     }
     tokenLen = 0;
     tokenBuf[0] = '\0';
@@ -369,8 +420,6 @@ void loop() {
         calInst.opcode = OP_KALIBRASI;
         calInst.p1 = 0;
         calInst.p2 = 0;
-        calInst.p3 = 0;
-        calInst.p4 = 0;
         executeInstruction(calInst);
         return;
       }
@@ -382,9 +431,10 @@ void loop() {
         char* semicolon = strchr(threshPtr, ';');
         if (semicolon != NULL || c == '\n' || c == '\r') {
           if (semicolon != NULL) *semicolon = '\0';
-          Instruction thInst;
-          parseInstruction(threshPtr, thInst);
-          executeInstruction(thInst);
+          char* colon = strchr(threshPtr, ':');
+          if (colon != NULL) {
+            handleSetThresholdString(colon + 1);
+          }
           prefixLen = 0;
           prefixBuf[0] = '\0';
           return;
@@ -794,18 +844,18 @@ uint8_t parseMissionIndex(const char* s) {
   return 1;
 }
 
-const char* getMissionKey(uint8_t idx) {
+void printMissionKey(uint8_t idx) {
   switch (idx) {
-    case 1: return "neutral_ungu";
-    case 2: return "neutral_hijau";
-    case 3: return "neutral_biru";
-    case 4: return "analysis_normal";
-    case 5: return "analysis_mystery";
-    case 6: return "containment_merah";
-    case 7: return "containment_kuning";
-    case 8: return "crl_leanbot_a";
-    case 9: return "crl_leanbot_b";
-    default: return "neutral_ungu";
+    case 1: Serial.print(F("neutral_ungu")); break;
+    case 2: Serial.print(F("neutral_hijau")); break;
+    case 3: Serial.print(F("neutral_biru")); break;
+    case 4: Serial.print(F("analysis_normal")); break;
+    case 5: Serial.print(F("analysis_mystery")); break;
+    case 6: Serial.print(F("containment_merah")); break;
+    case 7: Serial.print(F("containment_kuning")); break;
+    case 8: Serial.print(F("crl_leanbot_a")); break;
+    case 9: Serial.print(F("crl_leanbot_b")); break;
+    default: Serial.print(F("neutral_ungu")); break;
   }
 }
 
@@ -837,7 +887,6 @@ bool parseInstruction(char* str, Instruction& inst) {
   inst.opcode = OP_NONE;
   inst.p1 = 0;
   inst.p2 = 0;
-  inst.p3 = 1;
 
   if (strcasecmp_P(cmd, PSTR("MAJU")) == 0) {
     inst.opcode = OP_MAJU;
@@ -849,19 +898,14 @@ bool parseInstruction(char* str, Instruction& inst) {
     inst.opcode = OP_KIRI;
   } else if (strcasecmp_P(cmd, PSTR("BELOK_KANAN")) == 0 || strcasecmp_P(cmd, PSTR("PIVOT_KANAN")) == 0) {
     inst.opcode = OP_BELOK_KANAN;
-    inst.p3 = 1;
   } else if (strcasecmp_P(cmd, PSTR("BELOK_KANAN_MUNDUR")) == 0 || strcasecmp_P(cmd, PSTR("PIVOT_KANAN_MUNDUR")) == 0) {
-    inst.opcode = OP_BELOK_KANAN;
-    inst.p3 = -1;
+    inst.opcode = OP_BELOK_KANAN_REV;
   } else if (strcasecmp_P(cmd, PSTR("BELOK_KIRI")) == 0 || strcasecmp_P(cmd, PSTR("PIVOT_KIRI")) == 0) {
     inst.opcode = OP_BELOK_KIRI;
-    inst.p3 = 1;
   } else if (strcasecmp_P(cmd, PSTR("BELOK_KIRI_MUNDUR")) == 0 || strcasecmp_P(cmd, PSTR("PIVOT_KIRI_MUNDUR")) == 0) {
-    inst.opcode = OP_BELOK_KIRI;
-    inst.p3 = -1;
+    inst.opcode = OP_BELOK_KIRI_REV;
   } else if (strcasecmp_P(cmd, PSTR("BELOK")) == 0) {
     inst.opcode = OP_BELOK_KANAN;
-    inst.p3 = 1;
   } else if (strcasecmp_P(cmd, PSTR("STOP")) == 0) {
     inst.opcode = OP_STOP;
   } else if (strcasecmp_P(cmd, PSTR("SPEED")) == 0) {
@@ -884,10 +928,8 @@ bool parseInstruction(char* str, Instruction& inst) {
     inst.opcode = OP_END;
   } else if (strcasecmp_P(cmd, PSTR("FOLLOW_LINE")) == 0) {
     inst.opcode = OP_FOLLOW_LINE;
-    inst.p3 = 1;
   } else if (strcasecmp_P(cmd, PSTR("FOLLOW_LINE_MUNDUR")) == 0) {
-    inst.opcode = OP_FOLLOW_LINE;
-    inst.p3 = -1;
+    inst.opcode = OP_FOLLOW_LINE_REV;
   } else if (strcasecmp_P(cmd, PSTR("MAJU_LINE")) == 0) {
     inst.opcode = OP_MAJU_LINE;
   } else if (strcasecmp_P(cmd, PSTR("MUNDUR_LINE")) == 0) {
@@ -921,41 +963,9 @@ bool parseInstruction(char* str, Instruction& inst) {
     }
 
     if (inst.opcode == OP_SET_THRESHOLD) {
-      char* c1 = strchr(params, ',');
-      if (c1 != NULL) {
-        *c1 = '\0';
-        inst.p1 = atoi(params);
-        char* p2 = c1 + 1;
-        while (*p2 == ' ' || *p2 == '\t') p2++;
-        char* c2 = strchr(p2, ',');
-        if (c2 != NULL) {
-          *c2 = '\0';
-          inst.p2 = atoi(p2);
-          char* p3 = c2 + 1;
-          while (*p3 == ' ' || *p3 == '\t') p3++;
-          char* c3 = strchr(p3, ',');
-          if (c3 != NULL) {
-            *c3 = '\0';
-            inst.p3 = atoi(p3);
-            char* p4 = c3 + 1;
-            while (*p4 == ' ' || *p4 == '\t') p4++;
-            inst.p4 = atoi(p4);
-          } else {
-            inst.p3 = atoi(p2);
-            inst.p4 = inst.p3;
-          }
-        } else {
-          inst.p2 = atoi(p2);
-          inst.p3 = inst.p2;
-          inst.p4 = inst.p2;
-        }
-      } else {
-        int16_t val = atoi(params);
-        inst.p1 = val;
-        inst.p2 = val;
-        inst.p3 = val;
-        inst.p4 = val;
-      }
+      handleSetThresholdString(params);
+      inst.opcode = OP_NONE;
+      return true;
     } else if (inst.opcode == OP_MISI_DONE) {
       char* comma = strchr(params, ',');
       if (comma != NULL) {
@@ -980,7 +990,7 @@ bool parseInstruction(char* str, Instruction& inst) {
       }
     } else if (inst.opcode == OP_LED_WARNA) {
       inst.p1 = parseColorIndex(params);
-    } else if (inst.opcode == OP_BELOK_KANAN || inst.opcode == OP_BELOK_KIRI) {
+    } else if (inst.opcode == OP_BELOK_KANAN || inst.opcode == OP_BELOK_KANAN_REV || inst.opcode == OP_BELOK_KIRI || inst.opcode == OP_BELOK_KIRI_REV) {
       char* c1 = strchr(params, ',');
       if (c1 != NULL) {
         *c1 = '\0';
@@ -994,13 +1004,11 @@ bool parseInstruction(char* str, Instruction& inst) {
           char* p3 = c2 + 1;
           while (*p3 == ' ' || *p3 == '\t') p3++;
           if (strcasecmp_P(p3, PSTR("MUNDUR")) == 0 || atoi(p3) == -1) {
-            inst.p3 = -1;
-          } else {
-            inst.p3 = 1;
+            inst.opcode = (inst.opcode == OP_BELOK_KANAN || inst.opcode == OP_BELOK_KANAN_REV) ? OP_BELOK_KANAN_REV : OP_BELOK_KIRI_REV;
           }
         } else {
           if (strcasecmp_P(p2, PSTR("MUNDUR")) == 0 || atoi(p2) == -1) {
-            inst.p3 = -1;
+            inst.opcode = (inst.opcode == OP_BELOK_KANAN || inst.opcode == OP_BELOK_KANAN_REV) ? OP_BELOK_KANAN_REV : OP_BELOK_KIRI_REV;
             inst.p2 = 0;
           } else {
             inst.p2 = atoi(p2);
@@ -1009,7 +1017,7 @@ bool parseInstruction(char* str, Instruction& inst) {
       } else {
         inst.p1 = atoi(params);
       }
-    } else if (inst.opcode == OP_FOLLOW_LINE) {
+    } else if (inst.opcode == OP_FOLLOW_LINE || inst.opcode == OP_FOLLOW_LINE_REV) {
       char* c1 = strchr(params, ',');
       if (c1 != NULL) {
         *c1 = '\0';
@@ -1028,13 +1036,11 @@ bool parseInstruction(char* str, Instruction& inst) {
           char* p3 = c2 + 1;
           while (*p3 == ' ' || *p3 == '\t') p3++;
           if (strcasecmp_P(p3, PSTR("MUNDUR")) == 0 || atoi(p3) == -1) {
-            inst.p3 = -1;
-          } else {
-            inst.p3 = 1;
+            inst.opcode = OP_FOLLOW_LINE_REV;
           }
         } else {
           if (strcasecmp_P(p2, PSTR("MUNDUR")) == 0 || atoi(p2) == -1) {
-            inst.p3 = -1;
+            inst.opcode = OP_FOLLOW_LINE_REV;
             inst.p2 = 0;
           } else {
             inst.p2 = atoi(p2);
@@ -1086,11 +1092,19 @@ void executeInstruction(const Instruction& inst) {
       break;
 
     case OP_BELOK_KANAN:
-      pivotTurnDeg(inst.p1, +1, inst.p3 < 0 ? -1 : +1, inst.p2);
+      pivotTurnDeg(inst.p1, +1, +1, inst.p2);
+      break;
+
+    case OP_BELOK_KANAN_REV:
+      pivotTurnDeg(inst.p1, +1, -1, inst.p2);
       break;
 
     case OP_BELOK_KIRI:
-      pivotTurnDeg(inst.p1, -1, inst.p3 < 0 ? -1 : +1, inst.p2);
+      pivotTurnDeg(inst.p1, -1, +1, inst.p2);
+      break;
+
+    case OP_BELOK_KIRI_REV:
+      pivotTurnDeg(inst.p1, -1, -1, inst.p2);
       break;
 
     case OP_STOP:
@@ -1150,7 +1164,16 @@ void executeInstruction(const Instruction& inst) {
 
     case OP_FOLLOW_LINE:
       if (inst.p1 > 0) {
-        followLineUntilIntersection(inst.p1, inst.p2, inst.p3 < 0 ? -1 : +1);
+        followLineUntilIntersection(inst.p1, inst.p2, +1);
+      } else {
+        LbMotion.runLR(0, 0);
+        LbMotion.stopAndWait();
+      }
+      break;
+
+    case OP_FOLLOW_LINE_REV:
+      if (inst.p1 > 0) {
+        followLineUntilIntersection(inst.p1, inst.p2, -1);
       } else {
         LbMotion.runLR(0, 0);
         LbMotion.stopAndWait();
@@ -1180,16 +1203,20 @@ void executeInstruction(const Instruction& inst) {
       break;
 
     case OP_SET_THRESHOLD:
-      setLineThreshold(inst.p1, inst.p2, inst.p3, inst.p4);
       break;
 
     case OP_MISI_DONE:
       Serial.print(F("IOT : {\"key\":\""));
-      Serial.print(getMissionKey(inst.p1));
+      printMissionKey(inst.p1);
       Serial.print(F("\",\"done\":"));
       Serial.print(inst.p2 != 0 ? F("true") : F("false"));
       Serial.println(F("}"));
       break;
+
+    default:
+      break;
+  }
+}
 
     default:
       break;
