@@ -15,6 +15,7 @@ const CRUCIAL_DEFAULT_KEYS = {
   MUNDUR_LINE: ["max_cm"],
   TUNGGU: ["ms"],
   BUNYI: ["jumlah"],
+  MISI_DONE: ["misi", "status"],
 };
 
 class InstructionDefaultsService {

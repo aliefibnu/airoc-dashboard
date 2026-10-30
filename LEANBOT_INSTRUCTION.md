@@ -112,3 +112,22 @@ CODE;MAJU:10,5;END
 | --------- | --------- | ------ |
 | `EMERGENCY_STOP` | — | Menghentikan seluruh motor seketika, menyalakan indikator merah, dan mengosongkan antrean perintah |
 | `END` | — | Menandai akhir rangkaian atau batch instruksi dan menghentikan sisa gerakan motor |
+
+---
+
+## 6. IoT & Status Misi
+
+> [!NOTE]
+> Format Komunikasi Serial / BLE untuk IoT:
+> Robot mencetak output baris dengan prefix `IOT : ` berisi payload JSON:
+> `IOT : {"key":"key_unique_untuk masing2 misi","done":true}`
+
+| Instruksi | Parameter | Fungsi |
+| --------- | --------- | ------ |
+| `MISI_DONE` | `misi_key[,status]` | Menandai status selesai suatu misi ke IoT Dashboard. Robot mencetak `IOT : {"key":"<misi_key>","done":<true/false>}` (default status: 1/true). |
+
+### Daftar Key Misi Unik:
+- **Neutral (3 Misi)**: `neutral_ungu`, `neutral_hijau`, `neutral_biru`
+- **Analysis (2 Misi)**: `analysis_normal`, `analysis_mystery`
+- **Containment (2 Misi)**: `containment_merah`, `containment_kuning`
+- **Back to CRL (2 Misi)**: `crl_leanbot_a`, `crl_leanbot_b`

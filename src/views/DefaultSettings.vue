@@ -183,6 +183,7 @@ const CRUCIAL_PARAMS = {
   MUNDUR_LINE: ["max_cm"],
   TUNGGU: ["ms"],
   BUNYI: ["jumlah"],
+  MISI_DONE: ["misi", "status"],
 };
 
 const isBleConnected = ref(false);

@@ -26,6 +26,12 @@ const router = createRouter({
       component: () => import("../views/ProductionInstruction.vue"),
     },
     {
+      path: "/iot",
+      alias: ["/iot-dashboard"],
+      name: "iot-dashboard",
+      component: () => import("../views/IotDashboard.vue"),
+    },
+    {
       path: "/default-settings",
       alias: "/settings",
       name: "default-settings",

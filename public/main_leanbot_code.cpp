@@ -23,7 +23,8 @@ enum Opcode : uint8_t {
   OP_MAJU_LINE,
   OP_MUNDUR_LINE,
   OP_STOP_LINE,
-  OP_KALIBRASI
+  OP_KALIBRASI,
+  OP_MISI_DONE
 };
 
 enum RobotState : uint8_t {
@@ -85,6 +86,8 @@ void playBunyi(int count);
 void blinkLed(int count, int intervalMs);
 uint8_t parseColorIndex(const char* s);
 CRGB getColorFromIndex(uint8_t idx);
+uint8_t parseMissionIndex(const char* s);
+const char* getMissionKey(uint8_t idx);
 bool parseInstruction(char* str, Instruction& inst);
 void executeInstruction(const Instruction& inst);
 void executeAllBatches();
@@ -152,11 +155,19 @@ void printOpcodeName(uint8_t op) {
     case OP_MUNDUR_LINE: Serial.print(F("MUNDUR_LINE")); break;
     case OP_STOP_LINE: Serial.print(F("STOP_LINE")); break;
     case OP_KALIBRASI: Serial.print(F("KALIBRASI")); break;
+    case OP_MISI_DONE: Serial.print(F("MISI_DONE")); break;
     default: Serial.print(op); break;
   }
 }
 
 void printInstructionInfo(const Instruction& inst) {
+  if (inst.opcode == OP_MISI_DONE) {
+    Serial.print(F("MISI_DONE:"));
+    Serial.print(getMissionKey(inst.p1));
+    Serial.print(',');
+    Serial.print(inst.p2 != 0 ? 1 : 0);
+    return;
+  }
   printOpcodeName(inst.opcode);
   if (inst.p1 != 0 || inst.p2 != 0 || inst.p3 != 0) {
     Serial.print(':');
@@ -705,6 +716,35 @@ CRGB getColorFromIndex(uint8_t idx) {
   }
 }
 
+uint8_t parseMissionIndex(const char* s) {
+  if (strcasecmp_P(s, PSTR("neutral_ungu")) == 0 || strcasecmp_P(s, PSTR("ungu")) == 0 || strcmp_P(s, PSTR("1")) == 0) return 1;
+  if (strcasecmp_P(s, PSTR("neutral_hijau")) == 0 || strcasecmp_P(s, PSTR("hijau")) == 0 || strcmp_P(s, PSTR("2")) == 0) return 2;
+  if (strcasecmp_P(s, PSTR("neutral_biru")) == 0 || strcasecmp_P(s, PSTR("biru")) == 0 || strcmp_P(s, PSTR("3")) == 0) return 3;
+  if (strcasecmp_P(s, PSTR("analysis_normal")) == 0 || strcasecmp_P(s, PSTR("normal")) == 0 || strcmp_P(s, PSTR("4")) == 0) return 4;
+  if (strcasecmp_P(s, PSTR("analysis_mystery")) == 0 || strcasecmp_P(s, PSTR("mystery")) == 0 || strcmp_P(s, PSTR("5")) == 0) return 5;
+  if (strcasecmp_P(s, PSTR("containment_merah")) == 0 || strcasecmp_P(s, PSTR("merah")) == 0 || strcmp_P(s, PSTR("6")) == 0) return 6;
+  if (strcasecmp_P(s, PSTR("containment_kuning")) == 0 || strcasecmp_P(s, PSTR("kuning")) == 0 || strcmp_P(s, PSTR("7")) == 0) return 7;
+  if (strcasecmp_P(s, PSTR("crl_leanbot_a")) == 0 || strcasecmp_P(s, PSTR("leanbot_a")) == 0 || strcmp_P(s, PSTR("8")) == 0) return 8;
+  if (strcasecmp_P(s, PSTR("crl_leanbot_b")) == 0 || strcasecmp_P(s, PSTR("leanbot_b")) == 0 || strcmp_P(s, PSTR("9")) == 0) return 9;
+  if (isdigit(s[0])) return (uint8_t)atoi(s);
+  return 1;
+}
+
+const char* getMissionKey(uint8_t idx) {
+  switch (idx) {
+    case 1: return "neutral_ungu";
+    case 2: return "neutral_hijau";
+    case 3: return "neutral_biru";
+    case 4: return "analysis_normal";
+    case 5: return "analysis_mystery";
+    case 6: return "containment_merah";
+    case 7: return "containment_kuning";
+    case 8: return "crl_leanbot_a";
+    case 9: return "crl_leanbot_b";
+    default: return "neutral_ungu";
+  }
+}
+
 bool parseInstruction(char* str, Instruction& inst) {
   while (*str == ' ' || *str == '\t') str++;
   if (*str == '\0') return false;
@@ -792,6 +832,10 @@ bool parseInstruction(char* str, Instruction& inst) {
     inst.opcode = OP_STOP_LINE;
   } else if (strcasecmp_P(cmd, PSTR("KALIBRASI")) == 0 || strcasecmp_P(cmd, PSTR("CALIBRATE")) == 0) {
     inst.opcode = OP_KALIBRASI;
+  } else if (strcasecmp_P(cmd, PSTR("MISI_DONE")) == 0 || strcasecmp_P(cmd, PSTR("TANDAI_DONE")) == 0 || strcasecmp_P(cmd, PSTR("TANDAI_MISI_DONE")) == 0) {
+    inst.opcode = OP_MISI_DONE;
+    inst.p1 = 1;
+    inst.p2 = 1;
   } else {
     return false;
   }
@@ -810,7 +854,29 @@ bool parseInstruction(char* str, Instruction& inst) {
       while (*params == ' ' || *params == '\t') params++;
     }
 
-    if (inst.opcode == OP_LED_WARNA) {
+    if (inst.opcode == OP_MISI_DONE) {
+      char* comma = strchr(params, ',');
+      if (comma != NULL) {
+        *comma = '\0';
+        char* p1Str = params;
+        char* p2Str = comma + 1;
+        while (*p1Str == ' ' || *p1Str == '\t') p1Str++;
+        while (*p2Str == ' ' || *p2Str == '\t') p2Str++;
+        inst.p1 = parseMissionIndex(p1Str);
+        if (strcasecmp_P(p2Str, PSTR("TRUE")) == 0 || strcmp_P(p2Str, PSTR("1")) == 0) {
+          inst.p2 = 1;
+        } else if (strcasecmp_P(p2Str, PSTR("FALSE")) == 0 || strcmp_P(p2Str, PSTR("0")) == 0) {
+          inst.p2 = 0;
+        } else {
+          inst.p2 = atoi(p2Str);
+        }
+      } else {
+        char* p1Str = params;
+        while (*p1Str == ' ' || *p1Str == '\t') p1Str++;
+        inst.p1 = parseMissionIndex(p1Str);
+        inst.p2 = 1;
+      }
+    } else if (inst.opcode == OP_LED_WARNA) {
       inst.p1 = parseColorIndex(params);
     } else if (inst.opcode == OP_BELOK_KANAN || inst.opcode == OP_BELOK_KIRI) {
       char* c1 = strchr(params, ',');
@@ -1007,6 +1073,14 @@ void executeInstruction(const Instruction& inst) {
       LbRGB.fillColor(CRGB::Black);
       LbRGB.show();
       playBunyi(2);
+      break;
+
+    case OP_MISI_DONE:
+      Serial.print(F("IOT : {\"key\":\""));
+      Serial.print(getMissionKey(inst.p1));
+      Serial.print(F("\",\"done\":"));
+      Serial.print(inst.p2 != 0 ? F("true") : F("false"));
+      Serial.println(F("}"));
       break;
 
     default:
